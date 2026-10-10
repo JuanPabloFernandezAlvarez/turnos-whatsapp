@@ -1,0 +1,163 @@
+/* ========== COLORES ========== */
+:root {
+  --fondo: #f6f5f2;
+  --tarjeta: #ffffff;
+  --texto: #1d1d1b;
+  --texto-suave: #76756f;
+  --borde: #e4e2dc;
+  --color-principal: #1a7f5a;
+  --verde-whatsapp: #25a244;
+  --rojo: #c0392b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #131412;
+    --tarjeta: #1e1f1c;
+    --texto: #f0efea;
+    --texto-suave: #9a9990;
+    --borde: #32332f;
+  }
+}
+
+/* ========== BASE ========== */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font: 16px/1.4 system-ui, sans-serif;
+}
+
+main {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1 { font-size: 20px; margin: 0 0 12px; }
+
+h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-suave);
+  margin: 20px 0 8px;
+}
+
+/* ========== FORMULARIO ========== */
+input, textarea {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--fondo);
+  color: var(--texto);
+  font: inherit;
+}
+
+.fila { display: flex; gap: 8px; }
+.fila input { margin-bottom: 0; }
+.campo-nombre { flex: 2; }
+.fila input[type="time"] { flex: 1; min-width: 0; }
+.separado { margin-top: 12px; }
+
+summary {
+  cursor: pointer;
+  color: var(--texto-suave);
+  font-size: 14px;
+}
+
+details input { margin-top: 8px; }
+
+/* ========== TARJETAS ========== */
+.tarjeta {
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.tarjeta.apagada { opacity: 0.55; }
+
+.encabezado,
+.turno-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.hora { font-weight: 700; font-size: 18px; }
+.texto-suave { color: var(--texto-suave); font-size: 14px; }
+.vacio { text-align: center; color: var(--texto-suave); padding: 24px 0; }
+
+/* ========== BOTONES ========== */
+button {
+  font: inherit;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: var(--borde);
+  color: var(--texto);
+}
+
+.btn-principal {
+  background: var(--color-principal);
+  color: #fff;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.btn-whatsapp {
+  flex: 1;
+  background: var(--verde-whatsapp);
+  color: #fff;
+  font-weight: 600;
+}
+
+.acciones {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.acciones button { font-size: 16px; padding: 8px 12px; }
+
+/* ========== ESTADO ========== */
+.estado {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--borde);
+}
+
+.estado.confirmado { background: var(--color-principal); color: #fff; }
+.estado.cancelado,
+.estado.ausente { background: var(--rojo); color: #fff; }
+
+/* ========== TOAST ========== */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translate(-50%, 20px);
+  background: var(--texto);
+  color: var(--fondo);
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s, transform 0.25s;
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

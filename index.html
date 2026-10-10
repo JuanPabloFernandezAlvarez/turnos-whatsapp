@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Turnos</title>
+  <link rel="stylesheet" href="node_modules/bootstrap-icons/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <main>
+
+    <div class="encabezado">
+      <h1>Turnos</h1>
+      <span class="texto-suave" id="contador"></span>
+    </div>
+
+    <!-- Carga rápida: nombre + hora + Enter -->
+    <section class="tarjeta">
+      <div class="fila">
+        <input id="nombre" class="campo-nombre" placeholder="Nombre" autocomplete="off">
+        <input id="hora" type="time">
+        <button id="btn-agregar" class="btn-principal" title="Agregar">
+          <i class="bi bi-plus-lg"></i>
+        </button>
+      </div>
+
+      <!-- Opcionales: solo si hacen falta -->
+      <details>
+        <summary>Otro día o WhatsApp (opcional)</summary>
+        <input id="fecha" type="date">
+        <input id="telefono" type="tel" placeholder="WhatsApp (ej: 341 555 1234)">
+      </details>
+    </section>
+
+    <section id="lista"></section>
+
+    <!-- Configuración y respaldo -->
+    <details class="tarjeta">
+      <summary><i class="bi bi-gear"></i> Mensaje y respaldo</summary>
+
+      <input id="negocio" placeholder="Nombre de tu negocio">
+      <textarea id="plantilla" rows="3"></textarea>
+      <div class="texto-suave">Usá {nombre}, {dia}, {hora} y {negocio}.</div>
+
+      <div class="fila separado">
+        <button id="btn-exportar"><i class="bi bi-download"></i> Descargar respaldo</button>
+        <button id="btn-importar"><i class="bi bi-upload"></i> Cargar respaldo</button>
+      </div>
+      <input id="archivo" type="file" accept=".json" hidden>
+    </details>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
