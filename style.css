@@ -67,7 +67,7 @@ input, textarea {
 summary {
   cursor: pointer;
   color: var(--texto-suave);
-  font-size: 14px;
+  font-size: 24px;
 }
 
 details input { margin-top: 8px; }
