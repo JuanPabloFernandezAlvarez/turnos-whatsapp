@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Turnos para WhatsApp">
   <title>Turnos</title>
-  <link rel="stylesheet" href="iconos/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="iconos/bootstrap-icons.min.css" media="print" onload="this.media='all'">
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -94,6 +94,13 @@
   </div>
 </dialog>
 
-  <script src="app.js"></script>
+<dialog id="modal-confirmar">
+  <p id="confirmar-texto"></p>
+  <div class="fila">
+    <button id="btn-confirmar-no" type="button">Cancelar</button>
+    <button id="btn-confirmar-si" type="button" class="btn-peligro">Borrar</button>
+  </div>
+</dialog>
+  <script src="app.js" defer></script>
 </body>
 </html>

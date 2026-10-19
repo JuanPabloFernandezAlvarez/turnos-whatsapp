@@ -342,12 +342,38 @@ function cambiarPrecioCorte(id) {
     dibujarPanel();
   }
 }
+  function confirmar(texto, accion, textoBoton = "Borrar") {
+  $("confirmar-texto").textContent = texto;
+  $("btn-confirmar-si").textContent = textoBoton;
+
+  $("btn-confirmar-si").onclick = () => {
+    $("modal-confirmar").close();
+    accion();
+  };
+  $("btn-confirmar-no").onclick = () => $("modal-confirmar").close();
+
+  $("modal-confirmar").showModal();
+}
+function borrarTurno(id) {
+  const turno = datos.turnos.find((t) => t.id === id);
+
+  confirmar(`¿Borrar el turno de ${turno.nombre} a las ${turno.hora}?`, () => {
+    datos.turnos = datos.turnos.filter((t) => t.id !== id);
+    guardar();
+    dibujarLista();
+    mostrarToast("Turno borrado");
+  });
+}
 
 function borrarCorte(id) {
-  if (!confirm("¿Borrar este corte?")) return;
-  datos.cortes = datos.cortes.filter((c) => c.id !== id);
-  guardar();
-  dibujarPanel();
+  const corte = datos.cortes.find((c) => c.id === id);
+
+  confirmar(`¿Borrar el corte de ${corte.nombre} (${pesos(corte.precio)})?`, () => {
+    datos.cortes = datos.cortes.filter((c) => c.id !== id);
+    guardar();
+    dibujarPanel();
+    mostrarToast("Corte borrado");
+  });
 }
 
 function abrirPanel() {

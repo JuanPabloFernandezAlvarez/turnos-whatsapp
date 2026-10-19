@@ -174,11 +174,15 @@ summary:focus-visible {
 .estado.ausente { background: var(--rojo); color: #fff; }
 
 /* ========== TOAST ========== */
+
+/* Celular (por defecto): abajo, en el centro */
 .toast {
   position: fixed;
-  bottom: 24px;
   left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   transform: translate(-50%, 20px);
+  max-width: calc(100vw - 32px);
+  text-align: center;
   background: var(--texto);
   color: var(--fondo);
   padding: 10px 16px;
@@ -187,6 +191,7 @@ summary:focus-visible {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.25s, transform 0.25s;
+  z-index: 1000;
 }
 
 .toast.visible {
@@ -194,6 +199,22 @@ summary:focus-visible {
   transform: translate(-50%, 0);
 }
 
+/* Pantallas grandes (compu, tablet): arriba a la derecha */
+@media (min-width: 700px) {
+  .toast {
+    left: auto;
+    right: 24px;
+    top: 24px;
+    bottom: auto;
+    max-width: 320px;
+    text-align: left;
+    transform: translateY(-20px);
+  }
+
+  .toast.visible {
+    transform: translateY(0);
+  }
+}
 dialog {
   border: 1px solid var(--borde);
   border-radius: 14px;
@@ -249,3 +270,17 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 
 .fila-corte button { padding: 6px 10px; }
 .error { color: var(--rojo); font-size: 14px; margin: 0 0 8px; }
+
+/* ========== CONFIRMAR ========== */
+#modal-confirmar p {
+  margin: 0 0 16px;
+  font-size: 17px;
+}
+
+#modal-confirmar button { flex: 1; }
+
+.btn-peligro {
+  background: var(--rojo);
+  color: #fff;
+  font-weight: 600;
+}
