@@ -83,17 +83,19 @@
 
 <dialog id="modal-config">
   <h2>Tus valores</h2>
-  <label class="texto-suave">Precio del corte ($)</label>
+
+  <label for="cfg-precio" class="texto-suave">Precio del corte ($)</label>
   <input id="cfg-precio" type="number" inputmode="numeric" placeholder="Ej: 8000">
-  <label class="texto-suave">¿Qué % te llevás de cada corte?</label>
+
+  <label for="cfg-porcentaje" class="texto-suave">¿Qué % te llevás de cada corte?</label>
   <input id="cfg-porcentaje" type="number" inputmode="numeric" placeholder="Ej: 50">
+
   <p id="cfg-error" class="error"></p>
   <div class="fila">
     <button id="btn-cancelar-config" type="button">Cancelar</button>
     <button id="btn-guardar-config" class="btn-principal" type="button">Guardar</button>
   </div>
 </dialog>
-
 <dialog id="modal-confirmar">
   <p id="confirmar-texto"></p>
   <div class="fila">
