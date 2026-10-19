@@ -8,6 +8,10 @@ let datos = {
   negocio: "",
   plantilla:
     "Hola {nombre}! Te recordamos tu turno {dia} a las {hora} en {negocio}. ¿Me confirmás? 🙌",
+  horario: { inicio: "09:00", fin: "20:00", duracion: 30 },
+    precioCorte: null,
+  porcentaje: null,
+  cortes: [],
 };
  
 // Si no es null, estamos editando ese turno en vez de crear uno nuevo
@@ -124,7 +128,9 @@ function limpiarFormulario() {
   $("hora").value = "";
   $("telefono").value = "";
   $("fecha").value = hoyISO();
-  $("btn-agregar").innerHTML = '<i class="bi bi-plus-lg"></i>';
+  $("btn-agregar").innerHTML = '<i class="bi bi-plus-lg" aria-hidden="true"></i>';
+  $("btn-agregar").setAttribute("aria-label", "Agregar turno");
+  $("btn-agregar").title = "Agregar turno";
   editandoId = null;
   $("nombre").focus();
 }
@@ -172,7 +178,9 @@ function editarTurno(id) {
   $("hora").value = turno.hora;
   $("fecha").value = turno.fecha;
   $("telefono").value = turno.telefono;
-  $("btn-agregar").innerHTML = '<i class="bi bi-check-lg"></i>';
+  $("btn-agregar").innerHTML = '<i class="bi bi-check-lg" aria-hidden="true"></i>';
+  $("btn-agregar").setAttribute("aria-label", "Guardar cambios del turno");
+  $("btn-agregar").title = "Guardar cambios del turno";
  
   $("nombre").focus();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -194,49 +202,195 @@ function borrarTurno(id) {
   dibujarLista();
   mostrarToast("Turno borrado");
 }
- 
 // =====================================================
-// 6. RESPALDO
+// HORARIOS DISPONIBLES
 // =====================================================
- 
-function descargarRespaldo() {
-  const contenido = JSON.stringify(datos, null, 2);
-  const archivo = new Blob([contenido], { type: "application/json" });
- 
-  const enlace = document.createElement("a");
-  enlace.href = URL.createObjectURL(archivo);
-  enlace.download = "respaldo-turnos-" + hoyISO() + ".json";
-  enlace.click();
- 
-  mostrarToast("Respaldo descargado");
+
+const aMinutos = (hora) => {
+  const [h, m] = hora.split(":");
+  return Number(h) * 60 + Number(m);
+};
+
+const aTexto = (minutos) =>
+  String(Math.floor(minutos / 60)).padStart(2, "0") + ":" +
+  String(minutos % 60).padStart(2, "0");
+
+function horariosDelDia(fecha) {
+  const { inicio, fin, duracion } = datos.horario;
+
+  // Minutos de los turnos que siguen ocupando lugar ese día
+  const ocupados = datos.turnos
+    .filter((t) => t.fecha === fecha && t.estado !== "cancelado" && t.estado !== "ausente" && t.id !== editandoId)
+    .map((t) => aMinutos(t.hora));
+
+  const ahora = new Date();
+  const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
+  const lista = [];
+
+  for (let m = aMinutos(inicio); m < aMinutos(fin); m += duracion) {
+    const ocupado = ocupados.some((o) => o >= m && o < m + duracion);
+    const pasado = fecha === hoyISO() && m <= minutosAhora;
+    lista.push({ hora: aTexto(m), libre: !ocupado && !pasado });
+  }
+  return lista;
 }
- 
-function cargarRespaldo(evento) {
-  const archivo = evento.target.files[0];
-  if (!archivo) return;
- 
-  const lector = new FileReader();
-  lector.onload = () => {
-    try {
-      const nuevo = JSON.parse(lector.result);
-      if (!Array.isArray(nuevo.turnos)) throw new Error("Formato inválido");
- 
-      if (!confirm("Esto reemplaza los turnos actuales. ¿Seguir?")) return;
- 
-      datos = { ...datos, ...nuevo };
-      guardar();
-      $("negocio").value = datos.negocio;
-      $("plantilla").value = datos.plantilla;
-      dibujarLista();
-      mostrarToast("Respaldo cargado");
-    } catch (error) {
-      mostrarToast("El archivo no es válido");
-    }
-  };
-  lector.readAsText(archivo);
-  evento.target.value = ""; // permite elegir el mismo archivo otra vez
+
+function dibujarGrilla() {
+  const fecha = $("modal-fecha").value;
+  $("modal-grilla").innerHTML = horariosDelDia(fecha)
+    .map((h) =>
+      h.libre
+        ? `<button onclick="elegirHorario('${h.hora}')">${h.hora}</button>`
+        : `<button disabled>${h.hora}</button>`
+    )
+    .join("");
 }
- 
+
+function abrirModal() {
+  $("modal-fecha").value = $("fecha").value || hoyISO();
+  dibujarGrilla();
+  $("modal-horarios").showModal();
+}
+
+function elegirHorario(hora) {
+  $("hora").value = hora;
+  $("fecha").value = $("modal-fecha").value; // el turno queda en el día elegido
+  $("modal-horarios").close();
+  $("nombre").focus();
+}
+// =====================================================
+// CAJA
+// =====================================================
+
+const pesos = (n) => "$" + Math.round(n).toLocaleString("es-AR");
+
+function configurado() {
+  return datos.precioCorte > 0 && datos.porcentaje > 0;
+}
+
+function abrirConfig() {
+  $("cfg-precio").value = datos.precioCorte || "";
+  $("cfg-porcentaje").value = datos.porcentaje || "";
+  $("cfg-error").textContent = "";
+  $("modal-config").showModal();
+}
+
+function guardarConfig() {
+  const precio = Number($("cfg-precio").value);
+  const porcentaje = Number($("cfg-porcentaje").value);
+
+  if (!(precio > 0) || !(porcentaje > 0 && porcentaje <= 100)) {
+    $("cfg-error").textContent = "Poné un precio y un porcentaje entre 1 y 100";
+    return;
+  }
+
+  datos.precioCorte = precio;
+  datos.porcentaje = porcentaje;
+  guardar();
+  $("modal-config").close();
+  if ($("panel-caja").open) dibujarPanel();
+  mostrarToast("Valores guardados");
+}
+
+// Guarda un corte con el % vigente en este momento
+function registrarCorte(nombre, precio, fecha) {
+  const ahora = new Date();
+  const hora = String(ahora.getHours()).padStart(2, "0") + ":" +
+               String(ahora.getMinutes()).padStart(2, "0");
+
+  datos.cortes.push({
+    id: Date.now(),
+    fecha,
+    hora,
+    nombre,
+    precio,
+    porcentaje: datos.porcentaje,
+  });
+  guardar();
+}
+
+// Botón "$" de un turno
+function cobrarTurno(id) {
+  if (!configurado()) { abrirConfig(); return; }
+
+  const turno = datos.turnos.find((t) => t.id === id);
+  registrarCorte(turno.nombre, datos.precioCorte, hoyISO());
+  turno.cobrado = true;
+  turno.estado = "confirmado";
+  guardar();
+  dibujarLista();
+  mostrarToast("Cobrado " + pesos(datos.precioCorte));
+}
+
+// Carga manual desde el panel (sin turno, o con otro precio)
+function agregarCorteManual() {
+  const nombre = $("corte-nombre").value.trim() || "Sin nombre";
+  const precio = Number($("corte-precio").value) || datos.precioCorte;
+
+  registrarCorte(nombre, precio, $("panel-fecha").value);
+  $("corte-nombre").value = "";
+  $("corte-precio").value = "";
+  dibujarPanel();
+}
+
+function cambiarPrecioCorte(id) {
+  const corte = datos.cortes.find((c) => c.id === id);
+  const nuevo = Number(prompt("Nuevo precio", corte.precio));
+  if (nuevo > 0) {
+    corte.precio = nuevo;
+    guardar();
+    dibujarPanel();
+  }
+}
+
+function borrarCorte(id) {
+  if (!confirm("¿Borrar este corte?")) return;
+  datos.cortes = datos.cortes.filter((c) => c.id !== id);
+  guardar();
+  dibujarPanel();
+}
+
+function abrirPanel() {
+  if (!configurado()) { abrirConfig(); return; }
+  $("panel-fecha").value = $("panel-fecha").value || hoyISO();
+  dibujarPanel();
+  $("panel-caja").showModal();
+}
+
+function dibujarPanel() {
+  const verMes = $("panel-modo").value === "mes";
+  const fecha = $("panel-fecha").value;
+
+  const lista = datos.cortes
+    .filter((c) => verMes ? c.fecha.slice(0, 7) === fecha.slice(0, 7) : c.fecha === fecha)
+    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+
+  const total = lista.reduce((suma, c) => suma + c.precio, 0);
+  const paraMi = lista.reduce((suma, c) => suma + c.precio * c.porcentaje / 100, 0);
+
+  $("panel-resumen").innerHTML = `
+    <div><span class="texto-suave">Cortes</span><strong>${lista.length}</strong></div>
+    <div><span class="texto-suave">Total cobrado</span><strong>${pesos(total)}</strong></div>
+    <div><span class="texto-suave">Te queda</span><strong class="destacado">${pesos(paraMi)}</strong></div>
+  `;
+
+  if (lista.length === 0) {
+    $("panel-lista").innerHTML = '<div class="vacio">Todavía no hay cortes registrados.</div>';
+    return;
+  }
+
+  $("panel-lista").innerHTML = lista.map((c) => `
+    <div class="fila-corte">
+      <span>
+        ${verMes ? c.fecha.slice(8) + "/" + c.fecha.slice(5, 7) + " · " : ""}${c.hora} · ${limpiarTexto(c.nombre)}
+      </span>
+      <span>
+        <button onclick="cambiarPrecioCorte(${c.id})">${pesos(c.precio)}</button>
+        <button onclick="borrarCorte(${c.id})"><i class="bi bi-trash"></i></button>
+      </span>
+    </div>
+  `).join("");
+}
 // =====================================================
 // 7. DIBUJAR LA LISTA
 // =====================================================
@@ -257,6 +411,9 @@ function htmlDeTurno(turno) {
          <i class="bi bi-whatsapp"></i> Recordar
        </button>`
     : "";
+  const botonCobrar = turno.cobrado
+  ? `<span class="texto-suave"><i class="bi bi-cash-coin"></i> Cobrado</span>`
+  : `<button onclick="cobrarTurno(${turno.id})"><i class="bi bi-cash-coin"></i></button>`;
  
   return `
     <div class="tarjeta ${apagado}">
@@ -269,6 +426,7 @@ function htmlDeTurno(turno) {
  
       <div class="acciones">
         ${botonWhatsapp}
+        ${botonCobrar}
         <button onclick="cambiarEstado(${turno.id}, 'confirmado')"><i class="bi bi-check-lg"></i></button>
         <button onclick="cambiarEstado(${turno.id}, 'cancelado')"><i class="bi bi-x-lg"></i></button>
         <button onclick="cambiarEstado(${turno.id}, 'ausente')"><i class="bi bi-person-x"></i></button>
@@ -308,7 +466,9 @@ function dibujarLista() {
 // =====================================================
 // 8. ARRANQUE
 // =====================================================
- 
+ $("btn-horarios").onclick = abrirModal;
+$("modal-fecha").onchange = dibujarGrilla;
+$("btn-cerrar-modal").onclick = () => $("modal-horarios").close();
 cargar();
  
 $("fecha").value = hoyISO();
@@ -323,12 +483,14 @@ $("btn-agregar").onclick = guardarTurno;
     if (e.key === "Enter") guardarTurno();
   });
 });
- 
-$("negocio").oninput = (e) => { datos.negocio = e.target.value; guardar(); };
-$("plantilla").oninput = (e) => { datos.plantilla = e.target.value; guardar(); };
- 
-$("btn-exportar").onclick = descargarRespaldo;
-$("btn-importar").onclick = () => $("archivo").click();
-$("archivo").onchange = cargarRespaldo;
- 
+
+$("btn-panel").onclick = abrirPanel;
+$("btn-cerrar-panel").onclick = () => $("panel-caja").close();
+$("btn-config").onclick = abrirConfig;
+$("btn-guardar-config").onclick = guardarConfig;
+$("btn-cancelar-config").onclick = () => $("modal-config").close();
+$("btn-corte").onclick = agregarCorteManual;
+$("panel-modo").onchange = dibujarPanel;
+$("panel-fecha").onchange = dibujarPanel;
+
 dibujarLista();

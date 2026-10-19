@@ -15,15 +15,17 @@
     <div class="encabezado">
       <h1>Turnos</h1>
       <span class="texto-suave" id="contador"></span>
+      <button id="btn-panel" type="button"><i class="bi bi-cash-coin"></i> Caja</button>
     </div>
 
     <!-- Carga rápida: nombre + hora + Enter -->
     <section class="tarjeta">
       <div class="fila">
-        <label>Nombre:<input id="nombre" class="campo-nombre" placeholder="Nombre" autocomplete="off"></label >
-        <label>Hora:<input id="hora" type="time"></label>
-        <button id="btn-agregar" class="btn-principal" title="Agregar">
-          <i class="bi bi-plus-lg"></i>
+        <label class="campo-nombre-wrap">Nombre:<input id="nombre" class="campo-nombre" placeholder="Nombre" autocomplete="off"></label>
+        <label class="campo-hora-wrap">Hora:<input id="hora" type="time"></label>
+        <button id="btn-horarios" class="btn-icono" type="button" aria-label="Ver horarios disponibles" title="Ver horarios disponibles"><i class="bi bi-clock" aria-hidden="true"></i></button>
+        <button id="btn-agregar" class="btn-principal btn-icono" type="button" aria-label="Agregar turno" title="Agregar turno">
+          <i class="bi bi-plus-lg" aria-hidden="true"></i>
         </button>
       </div>
 
@@ -39,20 +41,58 @@
 
     <!-- Configuración y respaldo -->
     <details class="tarjeta">
-      <summary><i class="bi bi-gear"></i> Mensaje y respaldo</summary>
+      <summary><i class="bi bi-gear"></i> Recordatorio </summary>
 
       <input id="negocio" placeholder="Nombre de tu negocio">
       <textarea id="plantilla" rows="3"></textarea>
-      <div class="texto-suave">Usá {nombre}, {dia}, {hora} y {negocio}.</div>
-
-      <div class="fila separado">
-        <button id="btn-exportar"><i class="bi bi-download"></i> Descargar respaldo</button>
-        <button id="btn-importar"><i class="bi bi-upload"></i> Cargar respaldo</button>
-      </div>
       <input id="archivo" type="file" accept=".json" hidden>
     </details>
 
   </main>
+  <dialog id="modal-horarios">
+  <h2>Horarios libres</h2>
+  <input id="modal-fecha" type="date">
+  <div id="modal-grilla" class="grilla"></div>
+  <button id="btn-cerrar-modal" type="button">Cerrar</button>
+</dialog>
+<dialog id="panel-caja">
+  <div class="encabezado">
+    <h2>Caja</h2>
+    <button id="btn-cerrar-panel" type="button">Cerrar</button>
+  </div>
+
+  <div class="fila">
+    <select id="panel-modo">
+      <option value="dia">Día</option>
+      <option value="mes">Mes</option>
+    </select>
+    <input id="panel-fecha" type="date">
+  </div>
+
+  <div id="panel-resumen" class="resumen"></div>
+  <div id="panel-lista"></div>
+
+  <div class="fila separado">
+    <input id="corte-nombre" placeholder="Cliente (opcional)">
+    <input id="corte-precio" type="number" inputmode="numeric" placeholder="Precio">
+    <button id="btn-corte" class="btn-principal" type="button"><i class="bi bi-plus-lg"></i></button>
+  </div>
+
+  <button id="btn-config" type="button" class="separado">Cambiar precio y %</button>
+</dialog>
+
+<dialog id="modal-config">
+  <h2>Tus valores</h2>
+  <label class="texto-suave">Precio del corte ($)</label>
+  <input id="cfg-precio" type="number" inputmode="numeric" placeholder="Ej: 8000">
+  <label class="texto-suave">¿Qué % te llevás de cada corte?</label>
+  <input id="cfg-porcentaje" type="number" inputmode="numeric" placeholder="Ej: 50">
+  <p id="cfg-error" class="error"></p>
+  <div class="fila">
+    <button id="btn-cancelar-config" type="button">Cancelar</button>
+    <button id="btn-guardar-config" class="btn-principal" type="button">Guardar</button>
+  </div>
+</dialog>
 
   <script src="app.js"></script>
 </body>
