@@ -22,19 +22,18 @@
     <section class="tarjeta">
       <div class="fila">
         <label class="campo-nombre-wrap">Nombre:<input id="nombre" class="campo-nombre" placeholder="Nombre" autocomplete="off"></label>
-        <label class="campo-hora-wrap">Hora:<input id="hora" type="time"></label>
-        <button id="btn-horarios" class="btn-icono" type="button" aria-label="Ver horarios disponibles" title="Ver horarios disponibles"><i class="bi bi-clock" aria-hidden="true"></i></button>
+        <input id="hora" type="hidden">
+        <input id="fecha" type="hidden">
+        <button id="btn-horarios" class="btn-horarios btn-icono" type="button" aria-label="Elegir hora disponible" title="Elegir hora disponible"><i class="bi bi-clock" aria-hidden="true"></i><span id="hora-seleccionada"></span></button>
         <button id="btn-agregar" class="btn-principal btn-icono" type="button" aria-label="Agregar turno" title="Agregar turno">
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
         </button>
       </div>
-
       <!-- Opcionales: solo si hacen falta -->
-      <details>
-        <summary>Otro día o WhatsApp (opcional)</summary>
-        <input id="fecha" type="date">
+      <div class="opcional">
+        <label class="campo-opcional-wrap">WhatsApp (opcional):</label>
         <input id="telefono" type="tel" placeholder="WhatsApp (ej: 341 555 1234)">
-      </details>
+      </div>
     </section>
 
     <section id="lista"></section>

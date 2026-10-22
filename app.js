@@ -126,6 +126,7 @@ function enviarRecordatorio(id) {
 function limpiarFormulario() {
   $("nombre").value = "";
   $("hora").value = "";
+  actualizarHoraSeleccionada("");
   $("telefono").value = "";
   $("fecha").value = hoyISO();
   $("btn-agregar").innerHTML = '<i class="bi bi-plus-lg" aria-hidden="true"></i>';
@@ -176,6 +177,7 @@ function editarTurno(id) {
  
   $("nombre").value = turno.nombre;
   $("hora").value = turno.hora;
+  actualizarHoraSeleccionada(turno.hora);
   $("fecha").value = turno.fecha;
   $("telefono").value = turno.telefono;
   $("btn-agregar").innerHTML = '<i class="bi bi-check-lg" aria-hidden="true"></i>';
@@ -254,9 +256,17 @@ function abrirModal() {
 
 function elegirHorario(hora) {
   $("hora").value = hora;
+  actualizarHoraSeleccionada(hora);
   $("fecha").value = $("modal-fecha").value; // el turno queda en el día elegido
   $("modal-horarios").close();
   $("nombre").focus();
+}
+
+function actualizarHoraSeleccionada(hora) {
+  const etiqueta = hora ? "Cambiar hora, " + hora : "Elegir hora disponible";
+  $("hora-seleccionada").textContent = hora || "Elegir hora";
+  $("btn-horarios").setAttribute("aria-label", etiqueta);
+  $("btn-horarios").title = etiqueta;
 }
 // =====================================================
 // CAJA
@@ -503,11 +513,9 @@ $("plantilla").value = datos.plantilla;
  
 $("btn-agregar").onclick = guardarTurno;
  
-// Enter en nombre u hora también guarda el turno
-[$("nombre"), $("hora")].forEach((campo) => {
-  campo.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") guardarTurno();
-  });
+// Enter en el nombre también guarda el turno
+$("nombre").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") guardarTurno();
 });
 
 $("btn-panel").onclick = abrirPanel;
