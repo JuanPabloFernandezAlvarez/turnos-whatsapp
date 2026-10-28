@@ -134,6 +134,18 @@ summary:focus-visible {
   line-height: 1;
 }
 
+/* El botón de horario muestra el reloj y la hora elegida. */
+.btn-horarios.btn-icono {
+  flex-basis: 84px;
+  width: auto;
+  gap: 5px;
+  padding: 0 7px;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+#hora-seleccionada { min-width: 0; }
+
 .btn-principal {
   background: var(--color-principal);
   color: #fff;

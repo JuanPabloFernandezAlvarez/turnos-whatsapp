@@ -68,6 +68,13 @@ function hoyISO() {
   ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
   return ahora.toISOString().slice(0, 10);
 }
+
+function fechaValida(fecha) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
+  const [anio, mes, dia] = fecha.split("-").map(Number);
+  const valor = new Date(anio, mes - 1, dia);
+  return valor.getFullYear() === anio && valor.getMonth() === mes - 1 && valor.getDate() === dia;
+}
  
 function nombreDelDia(fechaISO) {
   const manana = new Date();
@@ -100,6 +107,11 @@ function formatearTelefono(telefono) {
   numero = numero.replace(/^0/, "");
   return "549" + numero;
 }
+
+function telefonoValido(telefono) {
+  const digitos = telefono.replace(/\D/g, "");
+  return digitos.length >= 8 && digitos.length <= 15;
+}
  
 function armarMensaje(turno) {
   return datos.plantilla
@@ -111,6 +123,10 @@ function armarMensaje(turno) {
  
 function enviarRecordatorio(id) {
   const turno = datos.turnos.find((t) => t.id === id);
+  if (!turno || !telefonoValido(turno.telefono || "")) {
+    mostrarToast("El WhatsApp no es válido");
+    return;
+  }
   const link =
     "https://wa.me/" +
     formatearTelefono(turno.telefono) +
@@ -140,12 +156,35 @@ function limpiarFormulario() {
 function guardarTurno() {
   const nombre = $("nombre").value.trim();
   const hora = $("hora").value;
-  const fecha = $("fecha").value || hoyISO();
+  const fecha = $("fecha").value;
   const telefono = $("telefono").value.trim();
  
   // Mínimo necesario: nombre y hora
-  if (!nombre || !hora) {
-    mostrarToast("Falta el nombre o la hora");
+  if (!nombre) {
+    mostrarToast("Escribí el nombre del cliente");
+    $("nombre").focus();
+    return;
+  }
+  if (nombre.length > 80) {
+    mostrarToast("El nombre no puede superar 80 caracteres");
+    $("nombre").focus();
+    return;
+  }
+  if (!hora) {
+    mostrarToast("Elegí un horario disponible");
+    return;
+  }
+  if (!fechaValida(fecha) || fecha < hoyISO()) {
+    mostrarToast("Elegí una fecha válida desde hoy");
+    return;
+  }
+  if (telefono && !telefonoValido(telefono)) {
+    mostrarToast("Revisá el número de WhatsApp");
+    $("telefono").focus();
+    return;
+  }
+  if (!horariosDelDia(fecha).some((slot) => slot.hora === hora && slot.libre)) {
+    mostrarToast("Ese horario ya no está disponible");
     return;
   }
  
@@ -173,6 +212,7 @@ function guardarTurno() {
 // Carga los datos del turno en el formulario para corregirlos
 function editarTurno(id) {
   const turno = datos.turnos.find((t) => t.id === id);
+  if (!turno) return;
   editandoId = id;
  
   $("nombre").value = turno.nombre;
@@ -191,6 +231,7 @@ function editarTurno(id) {
  
 function cambiarEstado(id, nuevoEstado) {
   const turno = datos.turnos.find((t) => t.id === id);
+  if (!turno || !["pendiente", "confirmado", "cancelado", "ausente"].includes(nuevoEstado)) return;
   turno.estado = nuevoEstado;
   guardar();
   dibujarLista();
@@ -209,6 +250,7 @@ function borrarTurno(id) {
 // =====================================================
 
 const aMinutos = (hora) => {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora || "")) return NaN;
   const [h, m] = hora.split(":");
   return Number(h) * 60 + Number(m);
 };
@@ -219,6 +261,9 @@ const aTexto = (minutos) =>
 
 function horariosDelDia(fecha) {
   const { inicio, fin, duracion } = datos.horario;
+  if (!fechaValida(fecha) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(inicio || "") ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(fin || "") ||
+      !Number.isInteger(duracion) || duracion < 5 || duracion > 480 || aMinutos(inicio) >= aMinutos(fin)) return [];
 
   // Minutos de los turnos que siguen ocupando lugar ese día
   const ocupados = datos.turnos
@@ -239,6 +284,10 @@ function horariosDelDia(fecha) {
 
 function dibujarGrilla() {
   const fecha = $("modal-fecha").value;
+  if (!fechaValida(fecha) || fecha < hoyISO()) {
+    $("modal-grilla").innerHTML = '<p class="texto-suave">Elegí hoy o una fecha futura.</p>';
+    return;
+  }
   $("modal-grilla").innerHTML = horariosDelDia(fecha)
     .map((h) =>
       h.libre
@@ -289,8 +338,11 @@ function guardarConfig() {
   const precio = Number($("cfg-precio").value);
   const porcentaje = Number($("cfg-porcentaje").value);
 
-  if (!(precio > 0) || !(porcentaje > 0 && porcentaje <= 100)) {
-    $("cfg-error").textContent = "Poné un precio y un porcentaje entre 1 y 100";
+  if (!Number.isFinite(precio) || precio <= 0 || precio > 100000000){
+    return $("cfg-error").textContent = "Poné un precio mayor que cero y menor a 100 millones";
+  }
+  if (!Number.isFinite(porcentaje) || porcentaje < 1 || porcentaje > 100) {
+    $("cfg-error").textContent = "Poné un porcentaje entre 1 y 100";
     return;
   }
 
@@ -324,6 +376,7 @@ function cobrarTurno(id) {
   if (!configurado()) { abrirConfig(); return; }
 
   const turno = datos.turnos.find((t) => t.id === id);
+  if (!turno || turno.cobrado) return;
   registrarCorte(turno.nombre, datos.precioCorte, hoyISO());
   turno.cobrado = true;
   turno.estado = "confirmado";
@@ -335,9 +388,25 @@ function cobrarTurno(id) {
 // Carga manual desde el panel (sin turno, o con otro precio)
 function agregarCorteManual() {
   const nombre = $("corte-nombre").value.trim() || "Sin nombre";
-  const precio = Number($("corte-precio").value) || datos.precioCorte;
+  const precioIngresado = $("corte-precio").value.trim();
+  const precio = precioIngresado === "" ? datos.precioCorte : Number(precioIngresado);
+  const fecha = $("panel-fecha").value;
 
-  registrarCorte(nombre, precio, $("panel-fecha").value);
+  if (!Number.isFinite(precio) || precio <= 0 || precio > 100000000) {
+    mostrarToast("Ingresá un precio válido mayor que cero");
+    $("corte-precio").focus();
+    return;
+  }
+  if (!fechaValida(fecha)) {
+    mostrarToast("Elegí una fecha válida");
+    return;
+  }
+  if (nombre.length > 80) {
+    mostrarToast("El nombre no puede superar 80 caracteres");
+    return;
+  }
+
+  registrarCorte(nombre, precio, fecha);
   $("corte-nombre").value = "";
   $("corte-precio").value = "";
   dibujarPanel();
