@@ -679,6 +679,49 @@ function dibujarLista() {
 
   $("lista").innerHTML = html;
 }
+// =====================================================
+// HISTORIAL
+// =====================================================
+
+const fechaCorta = (f) => f.slice(8) + "/" + f.slice(5, 7) + "/" + f.slice(0, 4);
+
+function abrirHistorial() {
+  $("hist-buscar").value = "";
+  dibujarHistorial();
+  $("modal-historial").showModal();
+}
+
+function dibujarHistorial() {
+  const texto = $("hist-buscar").value.trim().toLowerCase();
+
+  const pasados = datos.turnos
+    .filter((t) => t.fecha < hoyISO() && (!texto || t.nombre.toLowerCase().includes(texto)))
+    .sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));
+
+  if (pasados.length === 0) {
+    $("hist-lista").innerHTML = '<div class="vacio">No hay turnos anteriores.</div>';
+    return;
+  }
+
+  // Al buscar un cliente, un resumen de sus visitas
+  let resumen = "";
+  if (texto) {
+    const ausencias = pasados.filter((t) => t.estado === "ausente").length;
+    const atendidos = pasados.filter((t) => t.cobrado || t.estado === "confirmado").length;
+    resumen = `
+      <div class="tarjeta">
+        <strong>${pasados.length} turnos</strong> · ${atendidos} atendidos · ${ausencias} ausencias
+        <div class="texto-suave">Última visita: ${fechaCorta(pasados[0].fecha)}</div>
+      </div>`;
+  }
+
+  $("hist-lista").innerHTML = resumen + pasados.map((t) => `
+    <div class="fila-corte">
+      <span>${fechaCorta(t.fecha)} · ${t.hora} · ${limpiarTexto(t.nombre)}</span>
+      <span class="estado ${t.estado}">${t.estado}</span>
+    </div>
+  `).join("");
+}
 
 // Inicio
 $("btn-horarios").onclick = abrirModal;
@@ -707,6 +750,9 @@ $("panel-modo").onchange = dibujarPanel;
 $("panel-fecha").onchange = dibujarPanel;
 $("btn-srv-agregar").onclick = agregarServicio;
 $("btn-elegir-cancelar").onclick = () => $("modal-elegir").close();
+$("btn-historial").onclick = abrirHistorial;
+$("btn-cerrar-historial").onclick = () => $("modal-historial").close();
+$("hist-buscar").oninput = dibujarHistorial;
 
 // Si se cierra la configuración (con Guardar, Cerrar o Esc), el panel se actualiza
 $("modal-config").addEventListener("close", () => {

@@ -98,6 +98,22 @@ summary {
   gap: 8px;
 }
 
+.encabezado-principal {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.titulo-principal,
+.acciones-encabezado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.acciones-encabezado {
+  margin-left: auto;
+}
+
 .hora { font-weight: 700; font-size: 18px; }
 .texto-suave { color: var(--texto-suave); font-size: 14px; }
 .vacio { text-align: center; color: var(--texto-suave); padding: 24px 0; }
