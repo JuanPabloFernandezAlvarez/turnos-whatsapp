@@ -1,7 +1,8 @@
-// 1. DATOS
-// =====================================================
- 
+// Datos y persistencia
+
 const CLAVE_GUARDADO = "turnos_v1";
+const ESTADOS_TURNO = ["pendiente", "confirmado", "cancelado", "ausente"];
+const PATRON_HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 let datos = {
   turnos: [],
@@ -9,16 +10,16 @@ let datos = {
   plantilla:
     "Hola {nombre}! Te recordamos tu turno {dia} a las {hora} en {negocio}. ¿Me confirmás? 🙌",
   horario: { inicio: "09:00", fin: "20:00", duracion: 30 },
-    precioCorte: null,
+  servicios: [],
   porcentaje: null,
   cortes: [],
 };
- 
+
 // Si no es null, estamos editando ese turno en vez de crear uno nuevo
 let editandoId = null;
- 
+
 const $ = (id) => document.getElementById(id);
- 
+
 function cargar() {
   try {
     const guardado = localStorage.getItem(CLAVE_GUARDADO);
@@ -26,8 +27,15 @@ function cargar() {
   } catch (error) {
     console.log("No se pudo leer lo guardado", error);
   }
+
+  if (!Array.isArray(datos.servicios)) datos.servicios = [];
+
+  if (datos.precioCorte > 0 && datos.servicios.length === 0) {
+    datos.servicios.push({ id: Date.now(), nombre: "Corte", precio: datos.precioCorte });
+  }
+  delete datos.precioCorte;
 }
- 
+
 function guardar() {
   try {
     localStorage.setItem(CLAVE_GUARDADO, JSON.stringify(datos));
@@ -35,34 +43,30 @@ function guardar() {
     console.log("No se pudo guardar", error);
   }
 }
- 
-// =====================================================
-// 2. AVISOS (TOAST)
-// =====================================================
- 
+
+// Avisos
+
 let temporizadorToast;
- 
+
 function mostrarToast(texto) {
   let toast = $("toast");
- 
+
   if (!toast) {
     toast = document.createElement("div");
     toast.id = "toast";
     toast.className = "toast";
     document.body.appendChild(toast);
   }
- 
+
   toast.textContent = texto;
   toast.classList.add("visible");
- 
+
   clearTimeout(temporizadorToast);
   temporizadorToast = setTimeout(() => toast.classList.remove("visible"), 2000);
 }
- 
-// =====================================================
-// 3. FECHAS
-// =====================================================
- 
+
+// Fechas
+
 function hoyISO() {
   const ahora = new Date();
   ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
@@ -75,16 +79,16 @@ function fechaValida(fecha) {
   const valor = new Date(anio, mes - 1, dia);
   return valor.getFullYear() === anio && valor.getMonth() === mes - 1 && valor.getDate() === dia;
 }
- 
+
 function nombreDelDia(fechaISO) {
   const manana = new Date();
   manana.setDate(manana.getDate() + 1);
   manana.setMinutes(manana.getMinutes() - manana.getTimezoneOffset());
   const mananaISO = manana.toISOString().slice(0, 10);
- 
+
   if (fechaISO === hoyISO()) return "hoy";
   if (fechaISO === mananaISO) return "mañana";
- 
+
   const [anio, mes, dia] = fechaISO.split("-");
   const fecha = new Date(anio, mes - 1, dia);
   return (
@@ -96,11 +100,9 @@ function nombreDelDia(fechaISO) {
     })
   );
 }
- 
-// =====================================================
-// 4. WHATSAPP (solo si el turno tiene teléfono)
-// =====================================================
- 
+
+// WhatsApp
+
 function formatearTelefono(telefono) {
   let numero = telefono.replace(/\D/g, "");
   if (numero.startsWith("54")) return numero;
@@ -112,7 +114,7 @@ function telefonoValido(telefono) {
   const digitos = telefono.replace(/\D/g, "");
   return digitos.length >= 8 && digitos.length <= 15;
 }
- 
+
 function armarMensaje(turno) {
   return datos.plantilla
     .replace("{nombre}", turno.nombre)
@@ -120,7 +122,7 @@ function armarMensaje(turno) {
     .replace("{hora}", turno.hora)
     .replace("{negocio}", datos.negocio || "nuestro local");
 }
- 
+
 function enviarRecordatorio(id) {
   const turno = datos.turnos.find((t) => t.id === id);
   if (!turno || !telefonoValido(turno.telefono || "")) {
@@ -134,11 +136,9 @@ function enviarRecordatorio(id) {
     encodeURIComponent(armarMensaje(turno));
   window.open(link, "_blank");
 }
- 
-// =====================================================
-// 5. ACCIONES SOBRE LOS TURNOS
-// =====================================================
- 
+
+// Turnos
+
 function limpiarFormulario() {
   $("nombre").value = "";
   $("hora").value = "";
@@ -151,14 +151,14 @@ function limpiarFormulario() {
   editandoId = null;
   $("nombre").focus();
 }
- 
+
 // Sirve para crear un turno nuevo y también para guardar una edición
 function guardarTurno() {
   const nombre = $("nombre").value.trim();
   const hora = $("hora").value;
   const fecha = $("fecha").value;
   const telefono = $("telefono").value.trim();
- 
+
   // Mínimo necesario: nombre y hora
   if (!nombre) {
     mostrarToast("Escribí el nombre del cliente");
@@ -187,7 +187,7 @@ function guardarTurno() {
     mostrarToast("Ese horario ya no está disponible");
     return;
   }
- 
+
   if (editandoId) {
     const turno = datos.turnos.find((t) => t.id === editandoId);
     Object.assign(turno, { nombre, hora, fecha, telefono });
@@ -203,18 +203,18 @@ function guardarTurno() {
     });
     mostrarToast("Turno agregado");
   }
- 
+
   guardar();
   limpiarFormulario();
   dibujarLista();
 }
- 
+
 // Carga los datos del turno en el formulario para corregirlos
 function editarTurno(id) {
   const turno = datos.turnos.find((t) => t.id === id);
   if (!turno) return;
   editandoId = id;
- 
+
   $("nombre").value = turno.nombre;
   $("hora").value = turno.hora;
   actualizarHoraSeleccionada(turno.hora);
@@ -223,21 +223,21 @@ function editarTurno(id) {
   $("btn-agregar").innerHTML = '<i class="bi bi-check-lg" aria-hidden="true"></i>';
   $("btn-agregar").setAttribute("aria-label", "Guardar cambios del turno");
   $("btn-agregar").title = "Guardar cambios del turno";
- 
+
   $("nombre").focus();
   window.scrollTo({ top: 0, behavior: "smooth" });
   mostrarToast("Corregí y tocá ✓");
 }
- 
+
 function cambiarEstado(id, nuevoEstado) {
   const turno = datos.turnos.find((t) => t.id === id);
-  if (!turno || !["pendiente", "confirmado", "cancelado", "ausente"].includes(nuevoEstado)) return;
+  if (!turno || !ESTADOS_TURNO.includes(nuevoEstado)) return;
   turno.estado = nuevoEstado;
   guardar();
   dibujarLista();
   mostrarToast("Turno " + nuevoEstado);
 }
- 
+
 function borrarTurno(id) {
   if (!confirm("¿Borrar turno?")) return;
   datos.turnos = datos.turnos.filter((t) => t.id !== id);
@@ -245,12 +245,10 @@ function borrarTurno(id) {
   dibujarLista();
   mostrarToast("Turno borrado");
 }
-// =====================================================
-// HORARIOS DISPONIBLES
-// =====================================================
+// Horarios disponibles
 
 const aMinutos = (hora) => {
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora || "")) return NaN;
+  if (!PATRON_HORA.test(hora || "")) return NaN;
   const [h, m] = hora.split(":");
   return Number(h) * 60 + Number(m);
 };
@@ -261,9 +259,15 @@ const aTexto = (minutos) =>
 
 function horariosDelDia(fecha) {
   const { inicio, fin, duracion } = datos.horario;
-  if (!fechaValida(fecha) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(inicio || "") ||
-      !/^([01]\d|2[0-3]):[0-5]\d$/.test(fin || "") ||
-      !Number.isInteger(duracion) || duracion < 5 || duracion > 480 || aMinutos(inicio) >= aMinutos(fin)) return [];
+  if (
+    !fechaValida(fecha) ||
+    !PATRON_HORA.test(inicio || "") ||
+    !PATRON_HORA.test(fin || "") ||
+    !Number.isInteger(duracion) ||
+    duracion < 5 ||
+    duracion > 480 ||
+    aMinutos(inicio) >= aMinutos(fin)
+  ) return [];
 
   // Minutos de los turnos que siguen ocupando lugar ese día
   const ocupados = datos.turnos
@@ -317,111 +321,12 @@ function actualizarHoraSeleccionada(hora) {
   $("btn-horarios").setAttribute("aria-label", etiqueta);
   $("btn-horarios").title = etiqueta;
 }
-// =====================================================
-// CAJA
-// =====================================================
+// Caja
 
 const pesos = (n) => "$" + Math.round(n).toLocaleString("es-AR");
 
-function configurado() {
-  return datos.precioCorte > 0 && datos.porcentaje > 0;
-}
 
-function abrirConfig() {
-  $("cfg-precio").value = datos.precioCorte || "";
-  $("cfg-porcentaje").value = datos.porcentaje || "";
-  $("cfg-error").textContent = "";
-  $("modal-config").showModal();
-}
-
-function guardarConfig() {
-  const precio = Number($("cfg-precio").value);
-  const porcentaje = Number($("cfg-porcentaje").value);
-
-  if (!Number.isFinite(precio) || precio <= 0 || precio > 100000000){
-    return $("cfg-error").textContent = "Poné un precio mayor que cero y menor a 100 millones";
-  }
-  if (!Number.isFinite(porcentaje) || porcentaje < 1 || porcentaje > 100) {
-    $("cfg-error").textContent = "Poné un porcentaje entre 1 y 100";
-    return;
-  }
-
-  datos.precioCorte = precio;
-  datos.porcentaje = porcentaje;
-  guardar();
-  $("modal-config").close();
-  if ($("panel-caja").open) dibujarPanel();
-  mostrarToast("Valores guardados");
-}
-
-// Guarda un corte con el % vigente en este momento
-function registrarCorte(nombre, precio, fecha) {
-  const ahora = new Date();
-  const hora = String(ahora.getHours()).padStart(2, "0") + ":" +
-               String(ahora.getMinutes()).padStart(2, "0");
-
-  datos.cortes.push({
-    id: Date.now(),
-    fecha,
-    hora,
-    nombre,
-    precio,
-    porcentaje: datos.porcentaje,
-  });
-  guardar();
-}
-
-// Botón "$" de un turno
-function cobrarTurno(id) {
-  if (!configurado()) { abrirConfig(); return; }
-
-  const turno = datos.turnos.find((t) => t.id === id);
-  if (!turno || turno.cobrado) return;
-  registrarCorte(turno.nombre, datos.precioCorte, hoyISO());
-  turno.cobrado = true;
-  turno.estado = "confirmado";
-  guardar();
-  dibujarLista();
-  mostrarToast("Cobrado " + pesos(datos.precioCorte));
-}
-
-// Carga manual desde el panel (sin turno, o con otro precio)
-function agregarCorteManual() {
-  const nombre = $("corte-nombre").value.trim() || "Sin nombre";
-  const precioIngresado = $("corte-precio").value.trim();
-  const precio = precioIngresado === "" ? datos.precioCorte : Number(precioIngresado);
-  const fecha = $("panel-fecha").value;
-
-  if (!Number.isFinite(precio) || precio <= 0 || precio > 100000000) {
-    mostrarToast("Ingresá un precio válido mayor que cero");
-    $("corte-precio").focus();
-    return;
-  }
-  if (!fechaValida(fecha)) {
-    mostrarToast("Elegí una fecha válida");
-    return;
-  }
-  if (nombre.length > 80) {
-    mostrarToast("El nombre no puede superar 80 caracteres");
-    return;
-  }
-
-  registrarCorte(nombre, precio, fecha);
-  $("corte-nombre").value = "";
-  $("corte-precio").value = "";
-  dibujarPanel();
-}
-
-function cambiarPrecioCorte(id) {
-  const corte = datos.cortes.find((c) => c.id === id);
-  const nuevo = Number(prompt("Nuevo precio", corte.precio));
-  if (nuevo > 0) {
-    corte.precio = nuevo;
-    guardar();
-    dibujarPanel();
-  }
-}
-  function confirmar(texto, accion, textoBoton = "Borrar") {
+function confirmar(texto, accion, textoBoton = "Borrar") {
   $("confirmar-texto").textContent = texto;
   $("btn-confirmar-si").textContent = textoBoton;
 
@@ -433,36 +338,229 @@ function cambiarPrecioCorte(id) {
 
   $("modal-confirmar").showModal();
 }
-function borrarTurno(id) {
-  const turno = datos.turnos.find((t) => t.id === id);
 
-  confirmar(`¿Borrar el turno de ${turno.nombre} a las ${turno.hora}?`, () => {
-    datos.turnos = datos.turnos.filter((t) => t.id !== id);
+function confirmarBorrado(registros, id, mensaje, redibujar, mensajeExito) {
+  const registro = registros.find((r) => r.id === id);
+  if (!registro) return;
+
+  confirmar(mensaje(registro), () => {
+    registros.splice(registros.indexOf(registro), 1);
     guardar();
-    dibujarLista();
-    mostrarToast("Turno borrado");
+    redibujar();
+    mostrarToast(mensajeExito);
   });
+}
+
+function configurado() {
+  return datos.servicios.length > 0 && datos.porcentaje > 0;
+}
+
+// ---------- Configuración: porcentaje y servicios ----------
+
+function abrirConfig() {
+  $("cfg-porcentaje").value = datos.porcentaje || "";
+  $("cfg-error").textContent = "";
+  dibujarServicios();
+  $("modal-config").showModal();
+}
+
+function guardarConfig() {
+  const porcentaje = Number($("cfg-porcentaje").value);
+
+  if (!(porcentaje > 0 && porcentaje <= 100)) {
+    $("cfg-error").textContent = "El porcentaje tiene que estar entre 1 y 100";
+    return;
+  }
+  if (datos.servicios.length === 0) {
+    $("cfg-error").textContent = "Agregá al menos un servicio";
+    return;
+  }
+
+  datos.porcentaje = porcentaje;
+  guardar();
+  $("modal-config").close();
+  mostrarToast("Valores guardados");
+}
+
+function dibujarServicios() {
+  if (datos.servicios.length === 0) {
+    $("cfg-servicios").innerHTML =
+      '<div class="texto-suave">Todavía no cargaste servicios.</div>';
+    return;
+  }
+
+  $("cfg-servicios").innerHTML = datos.servicios.map((s) => `
+    <div class="fila-corte">
+      <span>${limpiarTexto(s.nombre)}</span>
+      <span>
+        <button onclick="cambiarPrecioServicio(${s.id})">${pesos(s.precio)}</button>
+        <button onclick="borrarServicio(${s.id})" aria-label="Borrar servicio"><i class="bi bi-trash"></i></button>
+      </span>
+    </div>
+  `).join("");
+}
+
+function agregarServicio() {
+  const nombre = $("srv-nombre").value.trim();
+  const precio = Number($("srv-precio").value);
+
+  if (!nombre || !(precio > 0)) {
+    $("cfg-error").textContent = "Poné el nombre y el precio del servicio";
+    return;
+  }
+
+  datos.servicios.push({ id: Date.now(), nombre, precio });
+  guardar();
+
+  $("srv-nombre").value = "";
+  $("srv-precio").value = "";
+  $("cfg-error").textContent = "";
+  dibujarServicios();
+  $("srv-nombre").focus();
+}
+
+function cambiarPrecioServicio(id) {
+  cambiarPrecio(
+    datos.servicios,
+    id,
+    dibujarServicios,
+    (servicio) => "Nuevo precio de " + servicio.nombre
+  );
+}
+
+function borrarServicio(id) {
+  confirmarBorrado(
+    datos.servicios,
+    id,
+    (servicio) => `¿Borrar "${servicio.nombre}"? Los cortes ya registrados no cambian.`,
+    dibujarServicios,
+    "Servicio borrado"
+  );
+}
+
+// ---------- Cobros ----------
+
+function registrarCorte(nombre, servicio, precio, fecha) {
+  const ahora = new Date();
+  const hora = String(ahora.getHours()).padStart(2, "0") + ":" +
+    String(ahora.getMinutes()).padStart(2, "0");
+
+  datos.cortes.push({
+    id: Date.now(),
+    fecha,
+    hora,
+    nombre,
+    servicio,                       // nombre del servicio en el momento del cobro
+    precio,
+    porcentaje: datos.porcentaje,   // % vigente en el momento del cobro
+  });
+}
+
+// Botón "$" de un turno
+function cobrarTurno(id) {
+  if (!configurado()) {
+    abrirConfig();
+    return;
+  }
+
+  const turno = datos.turnos.find((t) => t.id === id);
+  if (!turno || turno.cobrado) return;
+
+  // Con un solo servicio no hace falta preguntar
+  if (datos.servicios.length === 1) {
+    cobrarConServicio(id, datos.servicios[0].id);
+    return;
+  }
+
+  $("elegir-titulo").textContent = "¿Qué le hiciste a " + turno.nombre + "?";
+  $("elegir-lista").innerHTML = datos.servicios.map((s) => `
+    <button onclick="cobrarConServicio(${id}, ${s.id})">
+      <span>${limpiarTexto(s.nombre)}</span>
+      <strong>${pesos(s.precio)}</strong>
+    </button>
+  `).join("");
+  $("modal-elegir").showModal();
+}
+
+function cobrarConServicio(turnoId, servicioId) {
+  const turno = datos.turnos.find((t) => t.id === turnoId);
+  const servicio = datos.servicios.find((s) => s.id === servicioId);
+  if (
+    !turno ||
+    !servicio ||
+    turno.cobrado ||
+    ["cancelado", "ausente"].includes(turno.estado)
+  ) { mostrarToast("No se puede cobrar este turno."); return; }
+
+  registrarCorte(turno.nombre, servicio.nombre, servicio.precio, hoyISO());
+  turno.cobrado = true;
+  turno.estado = "confirmado";
+  guardar();
+
+  if ($("modal-elegir").open) $("modal-elegir").close();
+  dibujarLista();
+  mostrarToast("Cobrado " + servicio.nombre + " " + pesos(servicio.precio));
+}
+
+
+function agregarCorteManual() {
+  const servicio = datos.servicios.find((s) => s.id === Number($("corte-servicio").value));
+  if (!servicio) { mostrarToast("Elegí un servicio"); return; }
+
+  const nombre = $("corte-nombre").value.trim() || "Sin nombre";
+  if (!fechaValida($("panel-fecha").value)) { mostrarToast("Elegí una fecha válida"); return; }
+
+  registrarCorte(nombre, servicio.nombre, servicio.precio, $("panel-fecha").value);
+  guardar();
+  $("corte-nombre").value = "";
+  dibujarPanel();
+}
+
+function cambiarPrecio(registros, id, redibujar, textoPregunta = () => "Nuevo precio") {
+  const registro = registros.find((r) => r.id === id);
+  if (!registro) return;
+
+  const nuevo = Number(prompt(textoPregunta(registro), registro.precio));
+  if (!(nuevo > 0)) return;
+
+  registro.precio = nuevo;
+  guardar();
+  redibujar();
+}
+
+function cambiarPrecioCorte(id) {
+  cambiarPrecio(datos.cortes, id, dibujarPanel);
 }
 
 function borrarCorte(id) {
-  const corte = datos.cortes.find((c) => c.id === id);
-
-  confirmar(`¿Borrar el corte de ${corte.nombre} (${pesos(corte.precio)})?`, () => {
-    datos.cortes = datos.cortes.filter((c) => c.id !== id);
-    guardar();
-    dibujarPanel();
-    mostrarToast("Corte borrado");
-  });
+  confirmarBorrado(
+    datos.cortes,
+    id,
+    (corte) => `¿Borrar el corte de ${corte.nombre} (${pesos(corte.precio)})?`,
+    dibujarPanel,
+    "Corte borrado"
+  );
 }
-
 function abrirPanel() {
-  if (!configurado()) { abrirConfig(); return; }
+  if (!configurado()) {
+    abrirConfig();
+    return;
+  }
   $("panel-fecha").value = $("panel-fecha").value || hoyISO();
   dibujarPanel();
   $("panel-caja").showModal();
 }
 
+// ---------- Panel ----------
+
 function dibujarPanel() {
+  // Selector de servicios de la carga manual (conserva lo elegido)
+  const elegido = $("corte-servicio").value;
+  $("corte-servicio").innerHTML = datos.servicios.map((s) =>
+    `<option value="${s.id}">${limpiarTexto(s.nombre)} · ${pesos(s.precio)}</option>`
+  ).join("");
+  if (elegido) $("corte-servicio").value = elegido;
+
   const verMes = $("panel-modo").value === "mes";
   const fecha = $("panel-fecha").value;
 
@@ -470,14 +568,30 @@ function dibujarPanel() {
     .filter((c) => verMes ? c.fecha.slice(0, 7) === fecha.slice(0, 7) : c.fecha === fecha)
     .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
 
-  const total = lista.reduce((suma, c) => suma + c.precio, 0);
-  const paraMi = lista.reduce((suma, c) => suma + c.precio * c.porcentaje / 100, 0);
+  const resumen = lista.reduce((resultado, corte) => {
+    resultado.total += corte.precio;
+    resultado.paraMi += corte.precio * corte.porcentaje / 100;
+
+    const nombre = corte.servicio || "Corte";
+    const detalle = resultado.porServicio.get(nombre) || { cantidad: 0, total: 0 };
+    detalle.cantidad++;
+    detalle.total += corte.precio;
+    resultado.porServicio.set(nombre, detalle);
+    return resultado;
+  }, { total: 0, paraMi: 0, porServicio: new Map() });
 
   $("panel-resumen").innerHTML = `
     <div><span class="texto-suave">Cortes</span><strong>${lista.length}</strong></div>
-    <div><span class="texto-suave">Total cobrado</span><strong>${pesos(total)}</strong></div>
-    <div><span class="texto-suave">Te queda</span><strong class="destacado">${pesos(paraMi)}</strong></div>
+    <div><span class="texto-suave">Total cobrado</span><strong>${pesos(resumen.total)}</strong></div>
+    <div><span class="texto-suave">Te queda</span><strong class="destacado">${pesos(resumen.paraMi)}</strong></div>
   `;
+
+  $("panel-desglose").innerHTML = [...resumen.porServicio].map(([nombre, detalle]) => `
+    <div class="fila-corte">
+      <span>${limpiarTexto(nombre)} × ${detalle.cantidad}</span>
+      <strong>${pesos(detalle.total)}</strong>
+    </div>
+  `).join("");
 
   if (lista.length === 0) {
     $("panel-lista").innerHTML = '<div class="vacio">Todavía no hay cortes registrados.</div>';
@@ -488,28 +602,27 @@ function dibujarPanel() {
     <div class="fila-corte">
       <span>
         ${verMes ? c.fecha.slice(8) + "/" + c.fecha.slice(5, 7) + " · " : ""}${c.hora} · ${limpiarTexto(c.nombre)}
+        <span class="texto-suave">${limpiarTexto(c.servicio || "Corte")}</span>
       </span>
       <span>
         <button onclick="cambiarPrecioCorte(${c.id})">${pesos(c.precio)}</button>
-        <button onclick="borrarCorte(${c.id})"><i class="bi bi-trash"></i></button>
+        <button onclick="borrarCorte(${c.id})" aria-label="Borrar corte"><i class="bi bi-trash"></i></button>
       </span>
     </div>
   `).join("");
 }
-// =====================================================
-// 7. DIBUJAR LA LISTA
-// =====================================================
- 
+// Lista de turnos
+
 function limpiarTexto(texto) {
   const div = document.createElement("div");
   div.textContent = texto;
   return div.innerHTML;
 }
- 
+
 function htmlDeTurno(turno) {
   const apagado =
     turno.estado === "cancelado" || turno.estado === "ausente" ? "apagada" : "";
- 
+
   // El botón de WhatsApp existe solo si cargaron teléfono
   const botonWhatsapp = turno.telefono
     ? `<button class="btn-whatsapp" onclick="enviarRecordatorio(${turno.id})">
@@ -517,9 +630,8 @@ function htmlDeTurno(turno) {
        </button>`
     : "";
   const botonCobrar = turno.cobrado
-  ? `<span class="texto-suave"><i class="bi bi-cash-coin"></i> Cobrado</span>`
-  : `<button onclick="cobrarTurno(${turno.id})"><i class="bi bi-cash-coin"></i></button>`;
- 
+    ? `<span class="texto-suave"><i class="bi bi-cash-coin"></i> Cobrado</span>`
+    : `<button onclick="cobrarTurno(${turno.id})"><i class="bi bi-cash-coin"></i></button>`;
   return `
     <div class="tarjeta ${apagado}">
       <div class="turno-cabecera">
@@ -541,22 +653,22 @@ function htmlDeTurno(turno) {
     </div>
   `;
 }
- 
+
 function dibujarLista() {
   const proximos = datos.turnos
     .filter((t) => t.fecha >= hoyISO())
     .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
- 
+
   $("contador").textContent = proximos.length + " próximos";
- 
+
   if (proximos.length === 0) {
     $("lista").innerHTML = '<div class="vacio">Sin turnos. Escribí un nombre y una hora.</div>';
     return;
   }
- 
+
   let html = "";
   let diaAnterior = "";
- 
+
   proximos.forEach((turno) => {
     if (turno.fecha !== diaAnterior) {
       diaAnterior = turno.fecha;
@@ -564,24 +676,22 @@ function dibujarLista() {
     }
     html += htmlDeTurno(turno);
   });
- 
+
   $("lista").innerHTML = html;
 }
- 
-// =====================================================
-// 8. ARRANQUE
-// =====================================================
- $("btn-horarios").onclick = abrirModal;
+
+// Inicio
+$("btn-horarios").onclick = abrirModal;
 $("modal-fecha").onchange = dibujarGrilla;
 $("btn-cerrar-modal").onclick = () => $("modal-horarios").close();
 cargar();
- 
+
 $("fecha").value = hoyISO();
 $("negocio").value = datos.negocio;
 $("plantilla").value = datos.plantilla;
- 
+
 $("btn-agregar").onclick = guardarTurno;
- 
+
 // Enter en el nombre también guarda el turno
 $("nombre").addEventListener("keydown", (e) => {
   if (e.key === "Enter") guardarTurno();
@@ -595,5 +705,12 @@ $("btn-cancelar-config").onclick = () => $("modal-config").close();
 $("btn-corte").onclick = agregarCorteManual;
 $("panel-modo").onchange = dibujarPanel;
 $("panel-fecha").onchange = dibujarPanel;
+$("btn-srv-agregar").onclick = agregarServicio;
+$("btn-elegir-cancelar").onclick = () => $("modal-elegir").close();
+
+// Si se cierra la configuración (con Guardar, Cerrar o Esc), el panel se actualiza
+$("modal-config").addEventListener("close", () => {
+  if ($("panel-caja").open) dibujarPanel();
+});
 
 dibujarLista();

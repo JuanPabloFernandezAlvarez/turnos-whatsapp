@@ -136,10 +136,10 @@ summary:focus-visible {
 
 /* El botón de horario muestra el reloj y la hora elegida. */
 .btn-horarios.btn-icono {
-  flex-basis: 84px;
-  width: auto;
-  gap: 5px;
-  padding: 0 7px;
+  flex-basis: 44px;
+  width: 44px;
+  gap: 0;
+  padding: 0;
   white-space: nowrap;
   font-size: 14px;
 }
@@ -277,9 +277,67 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
   padding: 8px 0;
   border-bottom: 1px solid var(--borde);
 }
+.caja-modo{
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--borde);
+}
+.panel-modo {
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--borde);
+}
 
 .fila-corte button { padding: 6px 10px; }
 .error { color: var(--rojo); font-size: 14px; margin: 0 0 8px; }
+
+/* ========== REGISTRO DE SERVICIOS ========== */
+#panel-caja .registro-corte {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  gap: 8px 10px;
+  align-items: end;
+  padding-top: 12px;
+  border-top: 1px solid var(--borde);
+}
+
+#panel-caja .registro-corte > label {
+  grid-column: 1 / -1;
+  font-weight: 600;
+}
+
+#panel-caja .registro-campos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+#panel-caja .registro-campos input,
+#panel-caja .registro-campos select {
+  min-width: 0;
+  margin: 0;
+}
+/* ========== SERVICIOS ========== */
+h3 { font-size: 15px; margin: 16px 0 8px; }
+
+.fila select { flex: 1; min-width: 0; margin-bottom: 0; }
+
+.lista-servicios {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.lista-servicios button {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  font-size: 16px;
+}
 
 /* ========== CONFIRMAR ========== */
 #modal-confirmar p {

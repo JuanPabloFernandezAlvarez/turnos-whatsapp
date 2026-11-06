@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -21,11 +22,15 @@
     <!-- Carga rápida: nombre + hora + Enter -->
     <section class="tarjeta">
       <div class="fila">
-        <label class="campo-nombre-wrap">Nombre:<input id="nombre" class="campo-nombre" placeholder="Nombre" autocomplete="off"></label>
+        <label class="campo-nombre-wrap">Nombre:<input id="nombre" class="campo-nombre" placeholder="Nombre"
+            autocomplete="off"></label>
         <input id="hora" type="hidden">
         <input id="fecha" type="hidden">
-        <button id="btn-horarios" class="btn-horarios btn-icono" type="button" aria-label="Elegir hora disponible" title="Elegir hora disponible"><i class="bi bi-clock" aria-hidden="true"></i><span id="hora-seleccionada"></span></button>
-        <button id="btn-agregar" class="btn-principal btn-icono" type="button" aria-label="Agregar turno" title="Agregar turno">
+        <button id="btn-horarios" class="btn-horarios btn-icono" type="button" aria-label="Elegir hora disponible"
+          title="Elegir hora disponible"><i class="bi bi-clock" aria-hidden="true"></i><span
+            id="hora-seleccionada"></span></button>
+        <button id="btn-agregar" class="btn-principal btn-icono" type="button" aria-label="Agregar turno"
+          title="Agregar turno">
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
         </button>
       </div>
@@ -38,70 +43,83 @@
 
     <section id="lista"></section>
 
-    <!-- Configuración y respaldo -->
+    <!-- Configuración-->
     <details class="tarjeta">
       <summary><i class="bi bi-gear"></i> Recordatorio </summary>
 
       <input id="negocio" placeholder="Nombre de tu negocio">
       <textarea id="plantilla" rows="3"></textarea>
-      <input id="archivo" type="file" accept=".json" hidden>
     </details>
 
   </main>
   <dialog id="modal-horarios">
-  <h2>Horarios libres</h2>
-  <input id="modal-fecha" type="date">
-  <div id="modal-grilla" class="grilla"></div>
-  <button id="btn-cerrar-modal" type="button">Cerrar</button>
-</dialog>
-<dialog id="panel-caja">
-  <div class="encabezado">
-    <h2>Caja</h2>
-    <button id="btn-cerrar-panel" type="button">Cerrar</button>
-  </div>
+    <h2>Horarios libres</h2>
+    <input id="modal-fecha" type="date">
+    <div id="modal-grilla" class="grilla"></div>
+    <button id="btn-cerrar-modal" type="button">Cerrar</button>
+  </dialog>
+  <dialog id="panel-caja">
+    <div class="encabezado">
+      <h2>Caja</h2>
+      <button id="btn-cerrar-panel" type="button">Cerrar</button>
+    </div>
 
-  <div class="fila">
-    <select id="panel-modo">
-      <option value="dia">Día</option>
-      <option value="mes">Mes</option>
-    </select>
-    <input id="panel-fecha" type="date">
-  </div>
+    <div class="caja-modo">
+      <select id="panel-modo" aria-label="Modo de visualización">
+        <option value="dia">Día</option>
+        <option value="mes">Mes</option>
+      </select>
+      <input id="panel-fecha" type="date">
+    </div>
 
-  <div id="panel-resumen" class="resumen"></div>
-  <div id="panel-lista"></div>
+    <div id="panel-resumen" class="resumen"></div>
+    <div id="panel-desglose"></div>
+    <div id="panel-lista"></div>
 
-  <div class="fila separado">
-    <input id="corte-nombre" placeholder="Cliente (opcional)">
-    <input id="corte-precio" type="number" inputmode="numeric" placeholder="Precio">
-    <button id="btn-corte" class="btn-principal" type="button"><i class="bi bi-plus-lg"></i></button>
-  </div>
+    <div class="separado registro-corte"></div>
+      <div class="registro-servicio">
+        <label for="corte-nombre" class="texto-suave">Registrar corte:</label>
+        <input id="corte-nombre" aria-label="Cliente" placeholder="Cliente (opcional)">
+        <div class="fila">
+          <select id="corte-servicio" aria-label="Servicio" placeholder="servicio (opcional)"></select>
+        </div>
+      </div>
+      <button id="btn-corte" class="btn-principal btn-icono" type="button" aria-label="Agregar corte"><i
+          class="bi bi-plus-lg"></i></button>
+        </button>
+    </div>
 
-  <button id="btn-config" type="button" class="separado">Cambiar precio y %</button>
-</dialog>
+    <button id="btn-config" type="button" class="separado">Cambiar precio y %</button>
+  </dialog>
+  <dialog id="modal-elegir">
+    <h2 id="elegir-titulo"></h2>
+    <div id="elegir-lista" class="lista-servicios"></div>
+    <button id="btn-elegir-cancelar" type="button">Cancelar</button>
+  </dialog>
 
-<dialog id="modal-config">
-  <h2>Tus valores</h2>
+  <dialog id="modal-config">
+    <h2>Tus valores</h2>
 
-  <label for="cfg-precio" class="texto-suave">Precio del corte ($)</label>
-  <input id="cfg-precio" type="number" inputmode="numeric" placeholder="Ej: 8000">
+    <label for="cfg-porcentaje" class="texto-suave">¿Qué % te llevás de cada servicio?</label>
+    <input id="cfg-porcentaje" type="number" inputmode="numeric" placeholder="Ej: 50">
 
-  <label for="cfg-porcentaje" class="texto-suave">¿Qué % te llevás de cada corte?</label>
-  <input id="cfg-porcentaje" type="number" inputmode="numeric" placeholder="Ej: 50">
+    <h3>Tus servicios</h3>
+    <div id="cfg-servicios"></div>
 
-  <p id="cfg-error" class="error"></p>
-  <div class="fila">
-    <button id="btn-cancelar-config" type="button">Cancelar</button>
-    <button id="btn-guardar-config" class="btn-principal" type="button">Guardar</button>
-  </div>
-</dialog>
-<dialog id="modal-confirmar">
-  <p id="confirmar-texto"></p>
-  <div class="fila">
-    <button id="btn-confirmar-no" type="button">Cancelar</button>
-    <button id="btn-confirmar-si" type="button" class="btn-peligro">Borrar</button>
-  </div>
-</dialog>
+    <div class="fila separado">
+      <input id="srv-nombre" aria-label="Nombre del servicio" placeholder="Ej: Corte + barba">
+      <input id="srv-precio" type="number" inputmode="numeric" aria-label="Precio del servicio" placeholder="Precio">
+      <button id="btn-srv-agregar" class="btn-principal" type="button" aria-label="Agregar servicio"><i
+          class="bi bi-plus-lg"></i></button>
+    </div>
+
+    <p id="cfg-error" class="error"></p>
+    <div class="fila">
+      <button id="btn-cancelar-config" type="button" class="btn-peligro">Cerrar</button>
+      <button id="btn-guardar-config" class="btn-principal" type="button">Guardar</button>
+    </div>
+  </dialog>
   <script src="app.js" defer></script>
 </body>
+
 </html>
