@@ -114,6 +114,44 @@ summary {
   margin-left: auto;
 }
 
+@media (max-width: 380px) {
+  .encabezado-principal {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title actions"
+      "count actions";
+    gap: 0 6px;
+    align-items: center;
+  }
+
+  .titulo-principal {
+    display: contents;
+  }
+
+  .titulo-principal h1 {
+    grid-area: title;
+    margin-bottom: 0;
+  }
+
+  .titulo-principal .texto-suave {
+    grid-area: count;
+    font-size: 12px;
+  }
+
+  .acciones-encabezado {
+    grid-area: actions;
+    gap: 4px;
+    margin-left: 0;
+  }
+
+  .acciones-encabezado button {
+    padding-right: 6px;
+    padding-left: 6px;
+    white-space: nowrap;
+  }
+}
+
 .hora { font-weight: 700; font-size: 18px; }
 .texto-suave { color: var(--texto-suave); font-size: 14px; }
 .vacio { text-align: center; color: var(--texto-suave); padding: 24px 0; }
