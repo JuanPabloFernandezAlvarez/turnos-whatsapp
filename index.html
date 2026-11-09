@@ -81,20 +81,16 @@
     <div id="panel-desglose"></div>
     <div id="panel-lista"></div>
 
-    <div class="separado registro-corte"></div>
-      <div class="registro-servicio">
-        <label for="corte-nombre" class="texto-suave">Registrar corte:</label>
-        <input id="corte-nombre" aria-label="Cliente" placeholder="Cliente (opcional)">
-        <div class="fila">
-          <select id="corte-servicio" aria-label="Servicio" placeholder="servicio (opcional)"></select>
-        </div>
-      </div>
-      <button id="btn-corte" class="btn-principal btn-icono" type="button" aria-label="Agregar corte"><i
-          class="bi bi-plus-lg"></i></button>
-        </button>
+    <div class="separado registro-corte">
+      <label for="corte-nombre" class="texto-suave">Registrar corte:</label>
+      <input id="corte-nombre" aria-label="Cliente" placeholder="Cliente (opcional)">
+      <select id="corte-servicio" aria-label="Servicio"></select>
+      <button id="btn-corte" class="btn-principal btn-icono" type="button" aria-label="Agregar corte">
+        <i class="bi bi-plus-lg"></i>
+      </button>
     </div>
 
-    <button id="btn-config" type="button" class="separado">Cambiar precio y %</button>
+    <button id="btn-config" type="button" class="separado">Configurar servicios y comisión</button>
   </dialog>
   <dialog id="modal-elegir">
     <h2 id="elegir-titulo"></h2>
@@ -130,13 +126,6 @@
     <div class="fila">
       <button id="btn-cancelar-config" type="button" class="btn-peligro">Cerrar</button>
       <button id="btn-guardar-config" class="btn-principal" type="button">Guardar</button>
-    </div>
-  </dialog>
-  <dialog id="modal-confirmar">
-    <p id="confirmar-texto"></p>
-    <div class="fila">
-      <button id="btn-confirmar-no" type="button">Cancelar</button>
-      <button id="btn-confirmar-si" type="button" class="btn-peligro">Borrar</button>
     </div>
   </dialog>
   <dialog id="modal-historial">

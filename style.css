@@ -350,9 +350,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 /* ========== REGISTRO DE SERVICIOS ========== */
 #panel-caja .registro-corte {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 48px;
-  gap: 8px 10px;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+  align-items: center;
   padding-top: 12px;
   border-top: 1px solid var(--borde);
 }
@@ -362,17 +362,20 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
   font-weight: 600;
 }
 
-#panel-caja .registro-campos {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  min-width: 0;
+#panel-caja #corte-nombre {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
-#panel-caja .registro-campos input,
-#panel-caja .registro-campos select {
+#panel-caja #corte-servicio {
+  grid-column: 1 / -1;
   min-width: 0;
   margin: 0;
+}
+
+#panel-caja #btn-corte {
+  grid-column: 1 / -1;
+  justify-self: end;
 }
 /* ========== SERVICIOS ========== */
 h3 { font-size: 15px; margin: 16px 0 8px; }

@@ -123,12 +123,17 @@ function telefonoValido(telefono) {
   return digitos.length >= 8 && digitos.length <= 15;
 }
 
+const PLANTILLA_INICIAL =
+  "Hola {nombre}! Te recordamos tu turno {dia} a las {hora} en {negocio}. ¿Me confirmás? 🙌";
+
 function armarMensaje(turno) {
-  return datos.plantilla
-    .replace("{nombre}", turno.nombre)
-    .replace("{dia}", nombreDelDia(turno.fecha))
-    .replace("{hora}", turno.hora)
-    .replace("{negocio}", datos.negocio || "nuestro local");
+  const plantilla = (datos.plantilla || "").trim() || PLANTILLA_INICIAL;
+
+  return plantilla
+    .replaceAll("{nombre}", turno.nombre)
+    .replaceAll("{dia}", nombreDelDia(turno.fecha))
+    .replaceAll("{hora}", turno.hora)
+    .replaceAll("{negocio}", datos.negocio || "nuestro local");
 }
 
 function enviarRecordatorio(id) {
@@ -767,8 +772,11 @@ function dibujarLista() {
   const proximos = datos.turnos
     .filter((t) => t.fecha >= hoyISO())
     .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  const cantidadProximos = proximos.filter(
+    (t) => t.estado !== "cancelado",
+  ).length;
 
-  $("contador").textContent = proximos.length + " próximos";
+  $("contador").textContent = cantidadProximos + " próximos";
 
   if (proximos.length === 0) {
     $("lista").innerHTML =
@@ -858,6 +866,16 @@ $("negocio").value = datos.negocio;
 $("plantilla").value = datos.plantilla;
 
 $("btn-agregar").onclick = guardarTurno;
+// Guardar el mensaje de recordatorio apenas el usuario lo modifica
+$("negocio").oninput = (e) => {
+  datos.negocio = e.target.value;
+  guardar();
+};
+
+$("plantilla").oninput = (e) => {
+  datos.plantilla = e.target.value;
+  guardar();
+};
 
 // Enter en el nombre también guarda el turno
 $("nombre").addEventListener("keydown", (e) => {
