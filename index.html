@@ -13,15 +13,11 @@
 <body>
   <main>
 
-    <div class="encabezado encabezado-principal">
-      <div class="titulo-principal">
-        <h1>Turnos</h1>
-        <span class="texto-suave" id="contador"></span>
-      </div>
-      <div class="acciones-encabezado">
-        <button id="btn-panel" type="button"><i class="bi bi-cash-coin"></i> Caja</button>
-        <button id="btn-historial" type="button"><i class="bi bi-clock-history"></i> Historial</button>
-      </div>
+    <div class="encabezado">
+      <h1>Turnos</h1>
+      <span class="texto-suave" id="contador"></span>
+      <button id="btn-panel" type="button"><i class="bi bi-cash-coin"></i> Caja</button>
+      <button id="btn-historial" type="button"><i class="bi bi-clock-history"></i> Historial</button>
     </div>
 
     <!-- Carga rápida: nombre + hora + Enter -->
@@ -74,7 +70,7 @@
         <option value="dia">Día</option>
         <option value="mes">Mes</option>
       </select>
-      <input id="panel-fecha" type="date">
+      <input id="panel-fecha" type="date" max="">
     </div>
 
     <div id="panel-resumen" class="resumen"></div>
@@ -85,12 +81,13 @@
       <label for="corte-nombre" class="texto-suave">Registrar corte:</label>
       <input id="corte-nombre" aria-label="Cliente" placeholder="Cliente (opcional)">
       <select id="corte-servicio" aria-label="Servicio"></select>
+      <input id="corte-hora" type="time" aria-label="Horario del corte">
       <button id="btn-corte" class="btn-principal btn-icono" type="button" aria-label="Agregar corte">
         <i class="bi bi-plus-lg"></i>
       </button>
     </div>
 
-    <button id="btn-config" type="button" class="separado">Configurar servicios y comisión</button>
+    <button id="btn-config" type="button" class="separado">Cambiar precio y %</button>
   </dialog>
   <dialog id="modal-elegir">
     <h2 id="elegir-titulo"></h2>

@@ -98,60 +98,6 @@ summary {
   gap: 8px;
 }
 
-.encabezado-principal {
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.titulo-principal,
-.acciones-encabezado {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.acciones-encabezado {
-  margin-left: auto;
-}
-
-@media (max-width: 380px) {
-  .encabezado-principal {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "title actions"
-      "count actions";
-    gap: 0 6px;
-    align-items: center;
-  }
-
-  .titulo-principal {
-    display: contents;
-  }
-
-  .titulo-principal h1 {
-    grid-area: title;
-    margin-bottom: 0;
-  }
-
-  .titulo-principal .texto-suave {
-    grid-area: count;
-    font-size: 12px;
-  }
-
-  .acciones-encabezado {
-    grid-area: actions;
-    gap: 4px;
-    margin-left: 0;
-  }
-
-  .acciones-encabezado button {
-    padding-right: 6px;
-    padding-left: 6px;
-    white-space: nowrap;
-  }
-}
-
 .hora { font-weight: 700; font-size: 18px; }
 .texto-suave { color: var(--texto-suave); font-size: 14px; }
 .vacio { text-align: center; color: var(--texto-suave); padding: 24px 0; }
@@ -233,7 +179,8 @@ summary:focus-visible {
   background: var(--borde);
 }
 
-.estado.confirmado { background: var(--color-principal); color: #fff; }
+.estado.confirmado,
+.estado.atendido { background: var(--color-principal); color: #fff; }
 .estado.cancelado,
 .estado.ausente { background: var(--rojo); color: #fff; }
 
@@ -350,9 +297,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 /* ========== REGISTRO DE SERVICIOS ========== */
 #panel-caja .registro-corte {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
-  gap: 8px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  gap: 8px 10px;
+  align-items: end;
   padding-top: 12px;
   border-top: 1px solid var(--borde);
 }
@@ -362,19 +309,17 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
   font-weight: 600;
 }
 
-#panel-caja #corte-nombre {
-  grid-column: 1 / -1;
-  margin: 0;
-}
-
-#panel-caja #corte-servicio {
+#panel-caja #corte-nombre,
+#panel-caja #corte-servicio,
+#panel-caja #corte-hora {
   grid-column: 1 / -1;
   min-width: 0;
   margin: 0;
 }
 
 #panel-caja #btn-corte {
-  grid-column: 1 / -1;
+  grid-column: 2;
+  grid-row: 5;
   justify-self: end;
 }
 /* ========== SERVICIOS ========== */

@@ -256,6 +256,10 @@ function cambiarEstado(id, nuevoEstado) {
     mostrarToast("Ese turno ya está cobrado");
     return;
   }
+  if (nuevoEstado === "ausente" && !pasoElHorarioDelTurno(turno)) {
+  mostrarToast("Todavía no pasó el horario del turno");
+  return;
+}
 
   turno.estado = nuevoEstado;
   guardar();
@@ -268,6 +272,7 @@ function borrarTurno(id) {
   datos.turnos = datos.turnos.filter((t) => t.id !== id);
   guardar();
   dibujarLista();
+  if ($("modal-historial").open) dibujarHistorial();
   mostrarToast("Turno borrado");
 }
 // Horarios disponibles
@@ -282,6 +287,15 @@ const aTexto = (minutos) =>
   String(Math.floor(minutos / 60)).padStart(2, "0") +
   ":" +
   String(minutos % 60).padStart(2, "0");
+ 
+function pasoElHorarioDelTurno(turno) {
+  if (!fechaValida(turno.fecha) || !PATRON_HORA.test(turno.hora || "")) {
+    return false;
+  }
+
+  const fechaHoraTurno = new Date(turno.fecha + "T" + turno.hora + ":00");
+  return fechaHoraTurno < new Date();
+} 
 
 function horariosDelDia(fecha) {
   const { inicio, fin, duracion } = datos.horario;
@@ -478,13 +492,24 @@ function borrarServicio(id) {
 
 // ---------- Cobros ----------
 
-function registrarCorte(nombre, servicio, precio, fecha) {
+function horaActual() {
   const ahora = new Date();
-  const hora =
+  return (
     String(ahora.getHours()).padStart(2, "0") +
     ":" +
-    String(ahora.getMinutes()).padStart(2, "0");
+    String(ahora.getMinutes()).padStart(2, "0")
+  );
+}
 
+function registrarCorte(
+  nombre,
+  servicio,
+  precio,
+  fecha,
+  hora = horaActual(),
+  turnoId = null,
+  manual = false,
+) {
   datos.cortes.push({
     id: Date.now(),
     fecha,
@@ -493,6 +518,8 @@ function registrarCorte(nombre, servicio, precio, fecha) {
     servicio, // nombre del servicio en el momento del cobro
     precio,
     porcentaje: datos.porcentaje, // % vigente en el momento del cobro
+    ...(turnoId !== null ? { turnoId } : {}),
+    ...(manual ? { manual: true } : {}),
   });
 }
 
@@ -506,12 +533,10 @@ function cobrarTurno(id) {
   const turno = datos.turnos.find((t) => t.id === id);
   if (!turno || turno.cobrado) return;
 
-  if (turno.fecha > hoyISO()) {
-    mostrarToast(
-      "Ese turno es " + nombreDelDia(turno.fecha) + ". Cobralo ese día.",
-    );
-    return;
-  }
+if (!pasoElHorarioDelTurno(turno)) {
+  mostrarToast("Todavía no llegó el horario del turno");
+  return;
+}
   if (turno.estado === "cancelado" || turno.estado === "ausente") {
     mostrarToast(
       "El turno está " + turno.estado + ". Confirmalo antes de cobrar.",
@@ -543,21 +568,25 @@ function cobrarConServicio(turnoId, servicioId) {
   const servicio = datos.servicios.find((s) => s.id === servicioId);
   if (!turno || !servicio || turno.cobrado) return;
 
-  if (turno.fecha > hoyISO()) {
-    if ($("modal-elegir").open) $("modal-elegir").close();
-    mostrarToast(
-      "Ese turno es " + nombreDelDia(turno.fecha) + ". Cobralo ese día.",
-    );
+if (turno.estado === "cancelado" || turno.estado === "ausente") {
+  if ($("modal-elegir").open) $("modal-elegir").close();
+  mostrarToast("El turno está " + turno.estado + ". No se puede cobrar.");
+  return;
+}
 
-    if (turno.estado === "cancelado" || turno.estado === "ausente") {
-      if ($("modal-elegir").open) $("modal-elegir").close();
-      mostrarToast(
-        "El turno está " + turno.estado + ". Confirmalo antes de cobrar.",
-      );
-      return;
-    }
-  }
-  registrarCorte(turno.nombre, servicio.nombre, servicio.precio, turno.fecha);
+if (!pasoElHorarioDelTurno(turno)) {
+  if ($("modal-elegir").open) $("modal-elegir").close();
+  mostrarToast("Todavía no llegó el horario del turno");
+  return;
+}
+  registrarCorte(
+    turno.nombre,
+    servicio.nombre,
+    servicio.precio,
+    turno.fecha,
+    turno.hora,
+    turno.id,
+  );
   turno.cobrado = true;
   turno.estado = "confirmado";
   guardar();
@@ -577,9 +606,27 @@ function agregarCorteManual() {
   }
 
   const nombre = $("corte-nombre").value.trim() || "Sin nombre";
-  if (!fechaValida($("panel-fecha").value)) {
+  const hora = $("corte-hora").value;
+  const fecha = $("panel-fecha").value;
+  if (!fechaValida(fecha)) {
     mostrarToast("Elegí una fecha válida");
     return;
+  }
+  if (!PATRON_HORA.test(hora || "")) {
+    mostrarToast("Elegí un horario válido");
+    $("corte-hora").focus();
+    return;
+  }
+  if (fecha > hoyISO()) {
+    mostrarToast("No podés registrar un corte en una fecha futura");
+    return;
+  }
+  if (fecha === hoyISO()) {
+    const fechaHoraCorte = new Date(fecha + "T" + hora + ":00");
+    if (fechaHoraCorte > new Date()) {
+      mostrarToast("No podés registrar un corte en un horario futuro");
+      return;
+    }
   }
 
   registrarCorte(
@@ -587,6 +634,9 @@ function agregarCorteManual() {
     servicio.nombre,
     servicio.precio,
     $("panel-fecha").value,
+    hora,
+    null,
+    true,
   );
   guardar();
   $("corte-nombre").value = "";
@@ -629,6 +679,8 @@ function abrirPanel() {
     return;
   }
   $("panel-fecha").value = $("panel-fecha").value || hoyISO();
+  $("panel-fecha").max = hoyISO();
+  $("corte-hora").value = $("corte-hora").value || horaActual();
   dibujarPanel();
   $("panel-caja").showModal();
 }
@@ -724,30 +776,38 @@ function limpiarTexto(texto) {
 function htmlDeTurno(turno) {
   const apagado =
     turno.estado === "cancelado" || turno.estado === "ausente" ? "apagada" : "";
-
+  const puedeMarcarAusente = pasoElHorarioDelTurno(turno);
   // El botón de WhatsApp existe solo si cargaron teléfono
   const botonWhatsapp = turno.telefono
     ? `<button class="btn-whatsapp" onclick="enviarRecordatorio(${turno.id})">
          <i class="bi bi-whatsapp"></i> Recordar
        </button>`
     : "";
-  const esFuturo = turno.fecha > hoyISO();
+  const horarioTodaviaNoLlego = !pasoElHorarioDelTurno(turno);
   const sinCobro = turno.estado === "cancelado" || turno.estado === "ausente";
 
   const botonCobrar = turno.cobrado
     ? `<span class="texto-suave"><i class="bi bi-cash-coin"></i> Cobrado</span>`
-    : esFuturo || sinCobro
+    : horarioTodaviaNoLlego || sinCobro
       ? ""
       : `<button onclick="cobrarTurno(${turno.id})" aria-label="Cobrar"><i class="bi bi-cash-coin"></i></button>`;
 
-  // Un turno cobrado ya está atendido: no se puede cancelar ni marcar ausente
-  const botonesEstado = turno.cobrado
-    ? ""
-    : `
-    <button onclick="cambiarEstado(${turno.id}, 'confirmado')" aria-label="Confirmar"><i class="bi bi-check-lg"></i></button>
-       <button onclick="cambiarEstado(${turno.id}, 'cancelado')" aria-label="Cancelar"><i class="bi bi-x-lg"></i></button>
-       <button onclick="cambiarEstado(${turno.id}, 'ausente')" aria-label="Ausente"><i class="bi bi-person-x"></i></button>`;
+  const botonAusente = puedeMarcarAusente
+  ? `<button onclick="cambiarEstado(${turno.id}, 'ausente')" aria-label="Ausente">
+       <i class="bi bi-person-x"></i>
+     </button>`
+  : "";
 
+const botonesEstado = turno.cobrado
+  ? ""
+  : `
+    <button onclick="cambiarEstado(${turno.id}, 'confirmado')" aria-label="Confirmar">
+      <i class="bi bi-check-lg"></i>
+    </button>
+    <button onclick="cambiarEstado(${turno.id}, 'cancelado')" aria-label="Cancelar">
+      <i class="bi bi-x-lg"></i>
+    </button>
+    ${botonAusente}`;
   return `
     <div class="tarjeta ${apagado}">
       <div class="turno-cabecera">
@@ -772,9 +832,11 @@ function dibujarLista() {
   const proximos = datos.turnos
     .filter((t) => t.fecha >= hoyISO())
     .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
-  const cantidadProximos = proximos.filter(
-    (t) => t.estado !== "cancelado",
-  ).length;
+const cantidadProximos = proximos.filter(
+  (t) =>
+    t.estado !== "cancelado" &&
+    t.estado !== "ausente",
+).length;
 
   $("contador").textContent = cantidadProximos + " próximos";
 
@@ -813,13 +875,38 @@ function abrirHistorial() {
 function dibujarHistorial() {
   const texto = $("hist-buscar").value.trim().toLowerCase();
 
-  const pasados = datos.turnos
+  const turnosPasados = datos.turnos
     .filter(
       (t) =>
         t.fecha < hoyISO() &&
-        (!texto || t.nombre.toLowerCase().includes(texto)),
+        (!texto || (t.nombre || "").toLowerCase().includes(texto)),
     )
-    .sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));
+    .map((t) => ({ ...t }));
+  const cortesManuales = datos.cortes
+    .filter((corte) => {
+      if (corte.fecha >= hoyISO()) return false;
+      if (!corte.manual && corte.turnoId == null) {
+        const turnoCobrado = datos.turnos.some(
+          (turno) =>
+            turno.cobrado &&
+            turno.fecha === corte.fecha &&
+            (turno.nombre || "").toLowerCase() ===
+              (corte.nombre || "").toLowerCase(),
+        );
+        if (turnoCobrado) return false;
+      }
+      return !texto || (corte.nombre || "").toLowerCase().includes(texto);
+    })
+    .filter(
+      (corte) =>
+        corte.manual ||
+        corte.turnoId == null ||
+        !datos.turnos.some((turno) => turno.id === corte.turnoId),
+    )
+    .map((corte) => ({ ...corte, estado: "atendido" }));
+  const pasados = [...turnosPasados, ...cortesManuales].sort((a, b) =>
+    (b.fecha + b.hora).localeCompare(a.fecha + a.hora),
+  );
 
   if (pasados.length === 0) {
     $("hist-lista").innerHTML =
@@ -832,7 +919,8 @@ function dibujarHistorial() {
   if (texto) {
     const ausencias = pasados.filter((t) => t.estado === "ausente").length;
     const atendidos = pasados.filter(
-      (t) => t.cobrado || t.estado === "confirmado",
+      (t) =>
+        t.cobrado || t.estado === "confirmado" || t.estado === "atendido",
     ).length;
     resumen = `
       <div class="tarjeta">
@@ -895,6 +983,23 @@ $("btn-elegir-cancelar").onclick = () => $("modal-elegir").close();
 $("btn-historial").onclick = abrirHistorial;
 $("btn-cerrar-historial").onclick = () => $("modal-historial").close();
 $("hist-buscar").oninput = dibujarHistorial;
+
+window.addEventListener("storage", (evento) => {
+  if (evento.key !== CLAVE_GUARDADO || !evento.newValue) return;
+
+  try {
+    const datosActualizados = JSON.parse(evento.newValue);
+    if (!datosActualizados || !Array.isArray(datosActualizados.turnos)) {
+      throw new Error("Los datos guardados no contienen una lista de turnos");
+    }
+
+    datos = { ...datos, ...datosActualizados };
+    dibujarLista();
+    if ($("modal-historial").open) dibujarHistorial();
+  } catch (error) {
+    console.error("No se pudo sincronizar los turnos de otra pestaña", error);
+  }
+});
 
 // Si se cierra la configuración (con Guardar, Cerrar o Esc), el panel se actualiza
 $("modal-config").addEventListener("close", () => {
