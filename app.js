@@ -20,12 +20,50 @@ let editandoId = null;
 
 const $ = (id) => document.getElementById(id);
 
+let ultimaCopiaGuardada = JSON.stringify(datos);
+let lecturaDeDatosCorrecta = false;
+
+function mostrarErrorPersistencia(mensaje) {
+  const aviso = $("aviso-persistencia");
+  aviso.textContent = mensaje;
+  aviso.hidden = false;
+}
+
+function restaurarUltimaCopiaGuardada() {
+  datos = JSON.parse(ultimaCopiaGuardada);
+  $("negocio").value = datos.negocio;
+  $("plantilla").value = datos.plantilla;
+  dibujarLista();
+
+  if ($("modal-historial").open) dibujarHistorial();
+  if ($("panel-caja").open) dibujarPanel();
+  if ($("modal-config").open) {
+    $("cfg-porcentaje").value = datos.porcentaje || "";
+    dibujarServicios();
+  }
+}
+
 function cargar() {
   try {
     const guardado = localStorage.getItem(CLAVE_GUARDADO);
-    if (guardado) datos = { ...datos, ...JSON.parse(guardado) };
+    if (guardado) {
+      const cargado = JSON.parse(guardado);
+      if (!cargado || typeof cargado !== "object" || Array.isArray(cargado)) {
+        throw new Error("Los datos guardados no tienen un formato válido");
+      }
+      for (const campo of ["turnos", "servicios", "cortes"]) {
+        if (campo in cargado && !Array.isArray(cargado[campo])) {
+          throw new Error(`La lista "${campo}" guardada no es válida`);
+        }
+      }
+      datos = { ...datos, ...cargado };
+    }
   } catch (error) {
-    console.log("No se pudo leer lo guardado", error);
+    console.error("No se pudieron cargar los datos guardados", error);
+    mostrarErrorPersistencia(
+      "No se pudieron cargar los datos guardados. No se guardarán cambios para evitar sobrescribirlos. Revisá el almacenamiento y recargá la página.",
+    );
+    return false;
   }
 
   if (!Array.isArray(datos.servicios)) datos.servicios = [];
@@ -38,13 +76,31 @@ function cargar() {
     });
   }
   delete datos.precioCorte;
+  ultimaCopiaGuardada = JSON.stringify(datos);
+  lecturaDeDatosCorrecta = true;
+  return true;
 }
 
 function guardar() {
+  if (!lecturaDeDatosCorrecta) {
+    restaurarUltimaCopiaGuardada();
+    return false;
+  }
+
   try {
-    localStorage.setItem(CLAVE_GUARDADO, JSON.stringify(datos));
+    const serializados = JSON.stringify(datos);
+    localStorage.setItem(CLAVE_GUARDADO, serializados);
+    ultimaCopiaGuardada = serializados;
+    $("aviso-persistencia").hidden = true;
+    $("aviso-persistencia").textContent = "";
+    return true;
   } catch (error) {
-    console.log("No se pudo guardar", error);
+    console.error("No se pudieron guardar los cambios", error);
+    restaurarUltimaCopiaGuardada();
+    mostrarErrorPersistencia(
+      "No se pudieron guardar los cambios. Se restauraron los últimos datos guardados. Revisá el espacio disponible y volvé a intentar.",
+    );
+    return false;
   }
 }
 
@@ -202,10 +258,11 @@ function guardarTurno() {
     return;
   }
 
+  let mensajeExito;
   if (editandoId) {
     const turno = datos.turnos.find((t) => t.id === editandoId);
     Object.assign(turno, { nombre, hora, fecha, telefono });
-    mostrarToast("Turno corregido");
+    mensajeExito = "Turno corregido";
   } else {
     datos.turnos.push({
       id: Date.now(),
@@ -215,12 +272,13 @@ function guardarTurno() {
       telefono,
       estado: "pendiente",
     });
-    mostrarToast("Turno agregado");
+    mensajeExito = "Turno agregado";
   }
 
-  guardar();
+  if (!guardar()) return;
   limpiarFormulario();
   dibujarLista();
+  mostrarToast(mensajeExito);
 }
 
 // Carga los datos del turno en el formulario para corregirlos
@@ -262,7 +320,7 @@ function cambiarEstado(id, nuevoEstado) {
 }
 
   turno.estado = nuevoEstado;
-  guardar();
+  if (!guardar()) return;
   dibujarLista();
   mostrarToast("Turno " + nuevoEstado);
 }
@@ -270,7 +328,7 @@ function cambiarEstado(id, nuevoEstado) {
 function borrarTurno(id) {
   if (!confirm("¿Borrar turno?")) return;
   datos.turnos = datos.turnos.filter((t) => t.id !== id);
-  guardar();
+  if (!guardar()) return;
   dibujarLista();
   if ($("modal-historial").open) dibujarHistorial();
   mostrarToast("Turno borrado");
@@ -392,7 +450,7 @@ function confirmarBorrado(registros, id, mensaje, redibujar, mensajeExito) {
 
   confirmar(mensaje(registro), () => {
     registros.splice(registros.indexOf(registro), 1);
-    guardar();
+    if (!guardar()) return;
     redibujar();
     mostrarToast(mensajeExito);
   });
@@ -424,7 +482,7 @@ function guardarConfig() {
   }
 
   datos.porcentaje = porcentaje;
-  guardar();
+  if (!guardar()) return;
   $("modal-config").close();
   mostrarToast("Valores guardados");
 }
@@ -461,7 +519,7 @@ function agregarServicio() {
   }
 
   datos.servicios.push({ id: Date.now(), nombre, precio });
-  guardar();
+  if (!guardar()) return;
 
   $("srv-nombre").value = "";
   $("srv-precio").value = "";
@@ -589,7 +647,7 @@ if (!pasoElHorarioDelTurno(turno)) {
   );
   turno.cobrado = true;
   turno.estado = "confirmado";
-  guardar();
+  if (!guardar()) return;
 
   if ($("modal-elegir").open) $("modal-elegir").close();
   dibujarLista();
@@ -638,7 +696,7 @@ function agregarCorteManual() {
     null,
     true,
   );
-  guardar();
+  if (!guardar()) return;
   $("corte-nombre").value = "";
   dibujarPanel();
 }
@@ -656,7 +714,7 @@ function cambiarPrecio(
   if (!(nuevo > 0)) return;
 
   registro.precio = nuevo;
-  guardar();
+  if (!guardar()) return;
   redibujar();
 }
 
@@ -985,7 +1043,14 @@ $("btn-cerrar-historial").onclick = () => $("modal-historial").close();
 $("hist-buscar").oninput = dibujarHistorial;
 
 window.addEventListener("storage", (evento) => {
-  if (evento.key !== CLAVE_GUARDADO || !evento.newValue) return;
+  if (evento.key !== CLAVE_GUARDADO) return;
+  if (!evento.newValue) {
+    lecturaDeDatosCorrecta = false;
+    mostrarErrorPersistencia(
+      "Los datos se eliminaron desde otra pestaña. Recargá la página antes de seguir para evitar sobrescribir cambios.",
+    );
+    return;
+  }
 
   try {
     const datosActualizados = JSON.parse(evento.newValue);
@@ -994,10 +1059,23 @@ window.addEventListener("storage", (evento) => {
     }
 
     datos = { ...datos, ...datosActualizados };
+    ultimaCopiaGuardada = JSON.stringify(datos);
+    lecturaDeDatosCorrecta = true;
+    $("aviso-persistencia").hidden = true;
+    $("aviso-persistencia").textContent = "";
     dibujarLista();
     if ($("modal-historial").open) dibujarHistorial();
+    if ($("panel-caja").open) dibujarPanel();
+    if ($("modal-config").open) {
+      $("cfg-porcentaje").value = datos.porcentaje || "";
+      dibujarServicios();
+    }
   } catch (error) {
     console.error("No se pudo sincronizar los turnos de otra pestaña", error);
+    lecturaDeDatosCorrecta = false;
+    mostrarErrorPersistencia(
+      "No se pudieron sincronizar los datos de otra pestaña. Recargá la página antes de continuar.",
+    );
   }
 });
 

@@ -12,6 +12,7 @@
 
 <body>
   <main>
+    <div id="aviso-persistencia" class="aviso-persistencia" role="alert" aria-live="assertive" hidden></div>
 
     <div class="encabezado">
       <h1>Turnos</h1>
@@ -37,7 +38,7 @@
       </div>
       <!-- Opcionales: solo si hacen falta -->
       <div class="opcional">
-        <label class="campo-opcional-wrap">WhatsApp (opcional):</label>
+        <label class="campo-opcional-wrap" for="telefono">WhatsApp (opcional):</label>
         <input id="telefono" type="tel" placeholder="WhatsApp (ej: 341 555 1234)">
       </div>
     </section>
@@ -48,13 +49,16 @@
     <details class="tarjeta">
       <summary><i class="bi bi-gear"></i> Recordatorio </summary>
 
+      <label for="negocio">Nombre del negocio</label>
       <input id="negocio" placeholder="Nombre de tu negocio">
+      <label for="plantilla">Mensaje del recordatorio</label>
       <textarea id="plantilla" rows="3"></textarea>
     </details>
 
   </main>
   <dialog id="modal-horarios">
     <h2>Horarios libres</h2>
+    <label class="solo-lectores" for="modal-fecha">Fecha para elegir horario</label>
     <input id="modal-fecha" type="date">
     <div id="modal-grilla" class="grilla"></div>
     <button id="btn-cerrar-modal" type="button">Cerrar</button>
@@ -70,6 +74,7 @@
         <option value="dia">Día</option>
         <option value="mes">Mes</option>
       </select>
+      <label class="solo-lectores" for="panel-fecha">Fecha de la caja</label>
       <input id="panel-fecha" type="date" max="">
     </div>
 
