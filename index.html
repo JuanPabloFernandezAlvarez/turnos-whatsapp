@@ -14,7 +14,6 @@
 
 <body>
   <main>
-    <div id="aviso-persistencia" class="aviso-persistencia" role="alert" aria-live="assertive" hidden></div>
 
     <header class="cabecera">
       <div class="cabecera-titulo">
@@ -44,10 +43,12 @@
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
         </button>
       </div>
-      <!-- Opcionales: solo si hacen falta -->
-      <div class="opcional">
-        <label class="campo-opcional-wrap" for="telefono">WhatsApp (opcional):</label>
-        <input id="telefono" type="tel" placeholder="WhatsApp (ej: 341 555 1234)">
+      <p id="resumen-turno" class="texto-suave resumen-turno" aria-live="polite"></p>
+
+      <!-- Opcional: solo si hace falta -->
+      <div class="campo">
+        <label for="telefono">WhatsApp (opcional)</label>
+        <input id="telefono" type="tel" inputmode="tel" placeholder="Ej: 341 555 1234" autocomplete="off">
       </div>
       <button id="btn-cancelar-edicion" type="button" hidden>Cancelar edición</button>
     </form>
@@ -58,17 +59,31 @@
     <details class="tarjeta">
       <summary><i class="bi bi-gear" aria-hidden="true"></i> Mensaje de recordatorio</summary>
 
-      <label for="negocio">Nombre del negocio</label>
-      <input id="negocio" placeholder="Nombre de tu negocio">
-      <label for="plantilla">Mensaje del recordatorio</label>
-      <textarea id="plantilla" rows="3"></textarea>
+      <div class="campo">
+        <label for="negocio">Nombre de tu negocio</label>
+        <input id="negocio" placeholder="Ej: Barbería Lucas" maxlength="80">
+      </div>
+      <div class="campo">
+        <label for="plantilla">Texto del mensaje</label>
+        <textarea id="plantilla" rows="3" aria-describedby="ayuda-plantilla"></textarea>
+        <p id="ayuda-plantilla" class="texto-suave">
+          Podés usar {nombre}, {dia}, {hora} y {negocio}. Se reemplazan solos al enviar.
+        </p>
+      </div>
     </details>
 
   </main>
-  <dialog id="modal-horarios">
-    <h2>Horarios libres</h2>
-    <label class="solo-lectores" for="modal-fecha">Fecha para elegir horario</label>
-    <input id="modal-fecha" type="date">
+
+  <!-- Elegir horario -->
+  <dialog id="modal-horarios" aria-labelledby="horarios-titulo">
+    <div class="dialogo-cabecera">
+      <h2 id="horarios-titulo">Horarios libres</h2>
+      <button id="btn-cerrar-modal" type="button">Cerrar</button>
+    </div>
+    <div class="campo separado">
+      <label for="modal-fecha">Día</label>
+      <input id="modal-fecha" type="date">
+    </div>
     <div id="modal-grilla" class="grilla"></div>
   </dialog>
 
@@ -84,8 +99,7 @@
         <option value="dia">Día</option>
         <option value="mes">Mes</option>
       </select>
-      <label class="solo-lectores" for="panel-fecha">Fecha de la caja</label>
-      <input id="panel-fecha" type="date" max="">
+      <input id="panel-fecha" type="date" max="" aria-label="Fecha a consultar">
     </div>
 
     <div id="panel-resumen" class="resumen" role="group" aria-label="Resumen"></div>

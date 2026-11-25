@@ -60,16 +60,6 @@ h2.dia {
   margin: 20px 0 8px;
 }
 
-.aviso-persistencia {
-  margin-bottom: 12px;
-  padding: 12px;
-  border: 1px solid var(--rojo);
-  border-radius: 10px;
-  background: var(--tarjeta);
-  color: var(--rojo);
-  font-weight: 600;
-}
-
 /* Títulos de los diálogos */
 dialog h2 {
   font-size: 18px;
@@ -120,7 +110,7 @@ textarea { resize: vertical; }
 .campo { margin-bottom: 8px; }
 .campo:last-child { margin-bottom: 0; }
 
-.fila { display: flex; gap: 8px; margin-top: 16px; }
+.fila { display: flex; gap: 8px; }
 .fila > button { flex: 1; }
 .fila > .btn-icono { flex: 0 0 44px; }
 .fila-turno { align-items: flex-end; }
@@ -159,7 +149,14 @@ details[open] > summary { margin-bottom: 8px; }
   gap: 10px;
 }
 
-.opcional { margin-top: 8px; }
+.cabecera-acciones { display: flex; gap: 8px; }
+
+.dialogo-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
 
 /* ========== TARJETAS ========== */
 .tarjeta {
