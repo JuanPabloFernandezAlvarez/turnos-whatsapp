@@ -1,84 +1,69 @@
-// Datos y persistencia
+"use strict";
+
+// =====================================================
+// CONSTANTES
+// =====================================================
 
 const CLAVE_GUARDADO = "turnos_v1";
 const ESTADOS_TURNO = ["pendiente", "confirmado", "cancelado", "ausente"];
+// Un turno cancelado o ausente libera su horario
+const ESTADOS_SIN_LUGAR = ["cancelado", "ausente"];
 const PATRON_HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+const PATRON_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+const PLANTILLA_INICIAL =
+  "Hola {nombre}! Te recordamos tu turno {dia} a las {hora} en {negocio}. ¿Me confirmás? 🙌";
+const MAX_NOMBRE = 80;
+const MAX_SERVICIO = 60;
+const DURACION_TOAST = 2500;
 
-let datos = {
-  turnos: [],
-  negocio: "",
-  plantilla:
-    "Hola {nombre}! Te recordamos tu turno {dia} a las {hora} en {negocio}. ¿Me confirmás? 🙌",
-  horario: { inicio: "09:00", fin: "20:00", duracion: 30 },
-  servicios: [],
-  porcentaje: null,
-  cortes: [],
-};
-
-// Si no es null, estamos editando ese turno en vez de crear uno nuevo
-let editandoId = null;
+// =====================================================
+// UTILIDADES
+// =====================================================
 
 const $ = (id) => document.getElementById(id);
+const pad = (n) => String(n).padStart(2, "0");
 
-function cargar() {
-  try {
-    const guardado = localStorage.getItem(CLAVE_GUARDADO);
-    if (guardado) datos = { ...datos, ...JSON.parse(guardado) };
-  } catch (error) {
-    console.log("No se pudo leer lo guardado", error);
-  }
+const ESCAPES = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+// Escapa texto para meterlo en HTML (contenido o atributos)
+const esc = (texto) =>
+  String(texto ?? "").replace(/[&<>"']/g, (c) => ESCAPES[c]);
 
-  if (!Array.isArray(datos.servicios)) datos.servicios = [];
+const pesos = (n) => "$" + Math.round(n).toLocaleString("es-AR");
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+const sinAcentos = (texto) =>
+  String(texto ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
 
-  if (datos.precioCorte > 0 && datos.servicios.length === 0) {
-    datos.servicios.push({
-      id: Date.now(),
-      nombre: "Corte",
-      precio: datos.precioCorte,
-    });
-  }
-  delete datos.precioCorte;
+// IDs únicos aunque se creen varios en el mismo milisegundo
+let ultimoId = 0;
+function nuevoId() {
+  ultimoId = Math.max(Date.now(), ultimoId + 1);
+  return ultimoId;
 }
 
-function guardar() {
-  try {
-    localStorage.setItem(CLAVE_GUARDADO, JSON.stringify(datos));
-  } catch (error) {
-    console.log("No se pudo guardar", error);
-  }
-}
+// =====================================================
+// FECHAS Y HORAS
+// =====================================================
 
-// Avisos
+const aISO = (f) => `${f.getFullYear()}-${pad(f.getMonth() + 1)}-${pad(f.getDate())}`;
+const hoyISO = () => aISO(new Date());
 
-let temporizadorToast;
-
-function mostrarToast(texto) {
-  let toast = $("toast");
-
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.id = "toast";
-    toast.className = "toast";
-    document.body.appendChild(toast);
-  }
-
-  toast.textContent = texto;
-  toast.classList.add("visible");
-
-  clearTimeout(temporizadorToast);
-  temporizadorToast = setTimeout(() => toast.classList.remove("visible"), 2000);
-}
-
-// Fechas
-
-function hoyISO() {
-  const ahora = new Date();
-  ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
-  return ahora.toISOString().slice(0, 10);
+function mananaISO() {
+  const f = new Date();
+  f.setDate(f.getDate() + 1);
+  return aISO(f);
 }
 
 function fechaValida(fecha) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
+  if (!PATRON_FECHA.test(fecha)) return false;
   const [anio, mes, dia] = fecha.split("-").map(Number);
   const valor = new Date(anio, mes - 1, dia);
   return (
@@ -88,20 +73,32 @@ function fechaValida(fecha) {
   );
 }
 
+const horaValida = (hora) => PATRON_HORA.test(hora || "");
+
+function horaActual() {
+  const ahora = new Date();
+  return `${pad(ahora.getHours())}:${pad(ahora.getMinutes())}`;
+}
+
+function aMinutos(hora) {
+  if (!horaValida(hora)) return NaN;
+  const [h, m] = hora.split(":").map(Number);
+  return h * 60 + m;
+}
+
+const aTexto = (minutos) =>
+  `${pad(Math.floor(minutos / 60))}:${pad(minutos % 60)}`;
+
+const fechaCorta = (f) => `${f.slice(8)}/${f.slice(5, 7)}/${f.slice(0, 4)}`;
+
 function nombreDelDia(fechaISO) {
-  const manana = new Date();
-  manana.setDate(manana.getDate() + 1);
-  manana.setMinutes(manana.getMinutes() - manana.getTimezoneOffset());
-  const mananaISO = manana.toISOString().slice(0, 10);
-
   if (fechaISO === hoyISO()) return "hoy";
-  if (fechaISO === mananaISO) return "mañana";
+  if (fechaISO === mananaISO()) return "mañana";
 
-  const [anio, mes, dia] = fechaISO.split("-");
-  const fecha = new Date(anio, mes - 1, dia);
+  const [anio, mes, dia] = fechaISO.split("-").map(Number);
   return (
     "el " +
-    fecha.toLocaleDateString("es-AR", {
+    new Date(anio, mes - 1, dia).toLocaleDateString("es-AR", {
       weekday: "long",
       day: "numeric",
       month: "long",
@@ -109,280 +106,231 @@ function nombreDelDia(fechaISO) {
   );
 }
 
-// WhatsApp
-
-function formatearTelefono(telefono) {
-  let numero = telefono.replace(/\D/g, "");
-  if (numero.startsWith("54")) return numero;
-  numero = numero.replace(/^0/, "");
-  return "549" + numero;
+// Título de cada grupo de la lista: "hoy · 24/11", "el jueves 26 de noviembre"
+function tituloDelDia(fechaISO) {
+  const nombre = nombreDelDia(fechaISO);
+  if (nombre === "hoy" || nombre === "mañana") {
+    return `${nombre} · ${fechaISO.slice(8)}/${fechaISO.slice(5, 7)}`;
+  }
+  return nombre;
 }
 
-function telefonoValido(telefono) {
-  const digitos = telefono.replace(/\D/g, "");
-  return digitos.length >= 8 && digitos.length <= 15;
+function yaPaso(fecha, hora) {
+  if (!fechaValida(fecha) || !horaValida(hora)) return false;
+  return new Date(`${fecha}T${hora}:00`) < new Date();
 }
 
-const PLANTILLA_INICIAL =
-  "Hola {nombre}! Te recordamos tu turno {dia} a las {hora} en {negocio}. ¿Me confirmás? 🙌";
+const pasoElHorarioDelTurno = (turno) => yaPaso(turno.fecha, turno.hora);
 
-function armarMensaje(turno) {
-  const plantilla = (datos.plantilla || "").trim() || PLANTILLA_INICIAL;
+const scrollSuave = () =>
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
 
-  return plantilla
-    .replaceAll("{nombre}", turno.nombre)
-    .replaceAll("{dia}", nombreDelDia(turno.fecha))
-    .replaceAll("{hora}", turno.hora)
-    .replaceAll("{negocio}", datos.negocio || "nuestro local");
-}
+// =====================================================
+// DATOS Y PERSISTENCIA
+// (todo lo que toca el almacenamiento está en esta sección)
+// =====================================================
 
-function enviarRecordatorio(id) {
-  const turno = datos.turnos.find((t) => t.id === id);
-  if (!turno || !telefonoValido(turno.telefono || "")) {
-    mostrarToast("El WhatsApp no es válido");
-    return;
-  }
-  const link =
-    "https://wa.me/" +
-    formatearTelefono(turno.telefono) +
-    "?text=" +
-    encodeURIComponent(armarMensaje(turno));
-  window.open(link, "_blank");
-}
+const datosIniciales = () => ({
+  turnos: [],
+  negocio: "",
+  plantilla: PLANTILLA_INICIAL,
+  horario: { inicio: "09:00", fin: "20:00", duracion: 30 },
+  servicios: [],
+  porcentaje: null,
+  cortes: [],
+});
 
-// Turnos
+let datos = datosIniciales();
 
-function limpiarFormulario() {
-  $("nombre").value = "";
-  $("hora").value = "";
-  actualizarHoraSeleccionada("");
-  $("telefono").value = "";
-  $("fecha").value = hoyISO();
-  $("btn-agregar").innerHTML =
-    '<i class="bi bi-plus-lg" aria-hidden="true"></i>';
-  $("btn-agregar").setAttribute("aria-label", "Agregar turno");
-  $("btn-agregar").title = "Agregar turno";
-  editandoId = null;
-  $("nombre").focus();
-}
+// Si no es null, estamos editando ese turno en vez de crear uno nuevo
+let editandoId = null;
 
-// Sirve para crear un turno nuevo y también para guardar una edición
-function guardarTurno() {
-  const nombre = $("nombre").value.trim();
-  const hora = $("hora").value;
-  const fecha = $("fecha").value;
-  const telefono = $("telefono").value.trim();
+// Deja los datos guardados con la forma que el resto del código espera,
+// aunque vengan incompletos o de una versión vieja.
+function normalizar(crudo) {
+  const base = datosIniciales();
+  if (!crudo || typeof crudo !== "object") return base;
 
-  // Mínimo necesario: nombre y hora
-  if (!nombre) {
-    mostrarToast("Escribí el nombre del cliente");
-    $("nombre").focus();
-    return;
-  }
-  if (nombre.length > 80) {
-    mostrarToast("El nombre no puede superar 80 caracteres");
-    $("nombre").focus();
-    return;
-  }
-  if (!hora) {
-    mostrarToast("Elegí un horario disponible");
-    return;
-  }
-  if (!fechaValida(fecha) || fecha < hoyISO()) {
-    mostrarToast("Elegí una fecha válida desde hoy");
-    return;
-  }
-  if (telefono && !telefonoValido(telefono)) {
-    mostrarToast("Revisá el número de WhatsApp");
-    $("telefono").focus();
-    return;
-  }
-  if (!horariosDelDia(fecha).some((slot) => slot.hora === hora && slot.libre)) {
-    mostrarToast("Ese horario ya no está disponible");
-    return;
-  }
+  const lista = (x) =>
+    Array.isArray(x) ? x.filter((e) => e && typeof e === "object") : [];
 
-  if (editandoId) {
-    const turno = datos.turnos.find((t) => t.id === editandoId);
-    Object.assign(turno, { nombre, hora, fecha, telefono });
-    mostrarToast("Turno corregido");
-  } else {
-    datos.turnos.push({
-      id: Date.now(),
-      nombre,
-      hora,
-      fecha,
-      telefono,
-      estado: "pendiente",
+  const servicios = lista(crudo.servicios)
+    .map((s) => ({
+      ...s,
+      id: Number(s.id),
+      nombre: String(s.nombre ?? "").trim(),
+      precio: Number(s.precio),
+    }))
+    .filter((s) => Number.isFinite(s.id) && s.nombre && s.precio > 0);
+
+  // Migración: versiones viejas guardaban un único "precioCorte"
+  if (Number(crudo.precioCorte) > 0 && servicios.length === 0) {
+    servicios.push({
+      id: nuevoId(),
+      nombre: "Corte",
+      precio: Number(crudo.precioCorte),
     });
-    mostrarToast("Turno agregado");
   }
 
-  guardar();
-  limpiarFormulario();
-  dibujarLista();
+  const porcentaje = Number(crudo.porcentaje) > 0 ? Number(crudo.porcentaje) : null;
+
+  const turnos = lista(crudo.turnos)
+    .map((t) => ({
+      ...t,
+      id: Number(t.id),
+      nombre: String(t.nombre ?? ""),
+      telefono: String(t.telefono ?? ""),
+      estado: ESTADOS_TURNO.includes(t.estado) ? t.estado : "pendiente",
+      cobrado: Boolean(t.cobrado),
+    }))
+    .filter((t) => Number.isFinite(t.id) && fechaValida(t.fecha) && horaValida(t.hora));
+
+  const cortes = lista(crudo.cortes)
+    .map((c) => ({
+      ...c,
+      id: Number(c.id),
+      nombre: String(c.nombre ?? ""),
+      servicio: String(c.servicio || "Corte"),
+      hora: horaValida(c.hora) ? c.hora : "00:00",
+      precio: Number(c.precio),
+      porcentaje: Number(c.porcentaje) > 0 ? Number(c.porcentaje) : porcentaje || 0,
+    }))
+    .filter((c) => Number.isFinite(c.id) && fechaValida(c.fecha) && c.precio > 0);
+
+  const horario =
+    crudo.horario && typeof crudo.horario === "object" ? crudo.horario : {};
+
+  const resultado = {
+    ...base,
+    ...crudo,
+    turnos,
+    servicios,
+    cortes,
+    porcentaje,
+    negocio: String(crudo.negocio ?? ""),
+    plantilla:
+      typeof crudo.plantilla === "string" ? crudo.plantilla : base.plantilla,
+    horario: { ...base.horario, ...horario },
+  };
+  delete resultado.precioCorte;
+  return resultado;
 }
 
-// Carga los datos del turno en el formulario para corregirlos
-function editarTurno(id) {
-  const turno = datos.turnos.find((t) => t.id === id);
-  if (!turno) return;
-  editandoId = id;
-
-  $("nombre").value = turno.nombre;
-  $("hora").value = turno.hora;
-  actualizarHoraSeleccionada(turno.hora);
-  $("fecha").value = turno.fecha;
-  $("telefono").value = turno.telefono;
-  $("btn-agregar").innerHTML =
-    '<i class="bi bi-check-lg" aria-hidden="true"></i>';
-  $("btn-agregar").setAttribute("aria-label", "Guardar cambios del turno");
-  $("btn-agregar").title = "Guardar cambios del turno";
-
-  $("nombre").focus();
-  window.scrollTo({ top: 0, behavior: "smooth" });
-  mostrarToast("Corregí y tocá ✓");
-}
-
-function cambiarEstado(id, nuevoEstado) {
-  const turno = datos.turnos.find((t) => t.id === id);
-  if (
-    !turno ||
-    !["pendiente", "confirmado", "cancelado", "ausente"].includes(nuevoEstado)
-  )
-    return;
-
-  if (turno.cobrado && nuevoEstado !== "confirmado") {
-    mostrarToast("Ese turno ya está cobrado");
+function cargar() {
+  let guardado = null;
+  try {
+    guardado = localStorage.getItem(CLAVE_GUARDADO);
+  } catch (error) {
+    console.error("No se pudo leer lo guardado", error);
+  }
+  if (!guardado) {
+    datos = datosIniciales();
     return;
   }
-  if (nuevoEstado === "ausente" && !pasoElHorarioDelTurno(turno)) {
-  mostrarToast("Todavía no pasó el horario del turno");
-  return;
+
+  try {
+    datos = normalizar(JSON.parse(guardado));
+  } catch (error) {
+    console.error("Los datos guardados están dañados", error);
+    // Se deja una copia para poder recuperarlos antes de que se pisen
+    try {
+      localStorage.setItem(CLAVE_GUARDADO + "_respaldo", guardado);
+    } catch {
+      /* sin espacio: no hay nada más que hacer */
+    }
+    datos = datosIniciales();
+  }
 }
 
-  turno.estado = nuevoEstado;
-  guardar();
-  dibujarLista();
-  mostrarToast("Turno " + nuevoEstado);
-}
-
-function borrarTurno(id) {
-  if (!confirm("¿Borrar turno?")) return;
-  datos.turnos = datos.turnos.filter((t) => t.id !== id);
-  guardar();
-  dibujarLista();
-  if ($("modal-historial").open) dibujarHistorial();
-  mostrarToast("Turno borrado");
-}
-// Horarios disponibles
-
-const aMinutos = (hora) => {
-  if (!PATRON_HORA.test(hora || "")) return NaN;
-  const [h, m] = hora.split(":");
-  return Number(h) * 60 + Number(m);
-};
-
-const aTexto = (minutos) =>
-  String(Math.floor(minutos / 60)).padStart(2, "0") +
-  ":" +
-  String(minutos % 60).padStart(2, "0");
- 
-function pasoElHorarioDelTurno(turno) {
-  if (!fechaValida(turno.fecha) || !PATRON_HORA.test(turno.hora || "")) {
+function guardar() {
+  try {
+    localStorage.setItem(CLAVE_GUARDADO, JSON.stringify(datos));
+    return true;
+  } catch (error) {
+    console.error("No se pudo guardar", error);
+    mostrarToast("No se pudo guardar. Revisá el espacio del navegador.");
     return false;
   }
+}
 
-  const fechaHoraTurno = new Date(turno.fecha + "T" + turno.hora + ":00");
-  return fechaHoraTurno < new Date();
-} 
+// =====================================================
+// AVISOS (TOAST)
+// =====================================================
 
-function horariosDelDia(fecha) {
-  const { inicio, fin, duracion } = datos.horario;
-  if (
-    !fechaValida(fecha) ||
-    !PATRON_HORA.test(inicio || "") ||
-    !PATRON_HORA.test(fin || "") ||
-    !Number.isInteger(duracion) ||
-    duracion < 5 ||
-    duracion > 480 ||
-    aMinutos(inicio) >= aMinutos(fin)
-  )
-    return [];
+let temporizadorToast;
+let temporizadorOcultar;
 
-  // Minutos de los turnos que siguen ocupando lugar ese día
-  const ocupados = datos.turnos
-    .filter(
-      (t) =>
-        t.fecha === fecha &&
-        t.estado !== "cancelado" &&
-        t.estado !== "ausente" &&
-        t.id !== editandoId,
-    )
-    .map((t) => aMinutos(t.hora));
+// Región invisible que los lectores de pantalla anuncian
+function anunciar(texto) {
+  const region = $("anuncios");
+  region.textContent = "";
+  setTimeout(() => {
+    region.textContent = texto;
+  }, 50);
+}
 
-  const ahora = new Date();
-  const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
-  const lista = [];
+function mostrarToast(texto) {
+  const toast = $("toast");
+  const conPopover = typeof toast.showPopover === "function";
 
-  for (let m = aMinutos(inicio); m < aMinutos(fin); m += duracion) {
-    const ocupado = ocupados.some((o) => o >= m && o < m + duracion);
-    const pasado = fecha === hoyISO() && m <= minutosAhora;
-    lista.push({ hora: aTexto(m), libre: !ocupado && !pasado });
+  clearTimeout(temporizadorToast);
+  clearTimeout(temporizadorOcultar);
+  toast.textContent = texto;
+
+  // Un popover se dibuja por encima de los diálogos abiertos;
+  // sin esto los avisos quedaban tapados por el fondo oscuro.
+  if (conPopover) {
+    try {
+      if (toast.matches(":popover-open")) toast.hidePopover();
+      toast.showPopover();
+    } catch {
+      /* si falla, el aviso igual se muestra como un div común */
+    }
   }
-  return lista;
+  void toast.offsetWidth; // fuerza el estilo inicial para que anime
+  toast.classList.add("visible");
+  anunciar(texto);
+
+  temporizadorToast = setTimeout(() => {
+    toast.classList.remove("visible");
+    temporizadorOcultar = setTimeout(() => {
+      if (!conPopover) return;
+      try {
+        toast.hidePopover();
+      } catch {
+        /* ya estaba cerrado */
+      }
+    }, 300);
+  }, DURACION_TOAST);
 }
 
-function dibujarGrilla() {
-  const fecha = $("modal-fecha").value;
-  if (!fechaValida(fecha) || fecha < hoyISO()) {
-    $("modal-grilla").innerHTML =
-      '<p class="texto-suave">Elegí hoy o una fecha futura.</p>';
-    return;
-  }
-  $("modal-grilla").innerHTML = horariosDelDia(fecha)
-    .map((h) =>
-      h.libre
-        ? `<button onclick="elegirHorario('${h.hora}')">${h.hora}</button>`
-        : `<button disabled>${h.hora}</button>`,
-    )
-    .join("");
+// =====================================================
+// EVENTOS: ayuda para no usar onclick dentro del HTML
+// =====================================================
+
+// Un solo listener por contenedor. Cada botón lleva data-accion y data-id.
+function alClickear(idContenedor, acciones) {
+  const contenedor = $(idContenedor);
+  contenedor.addEventListener("click", (evento) => {
+    const boton = evento.target.closest("[data-accion]");
+    if (!boton || !contenedor.contains(boton) || boton.disabled) return;
+    const accion = acciones[boton.dataset.accion];
+    if (accion) accion(Number(boton.dataset.id), boton.dataset);
+  });
 }
 
-function abrirModal() {
-  $("modal-fecha").value = $("fecha").value || hoyISO();
-  dibujarGrilla();
-  $("modal-horarios").showModal();
-}
+// =====================================================
+// CONFIRMAR Y PEDIR PRECIO (reemplazan a confirm() y prompt())
+// =====================================================
 
-function elegirHorario(hora) {
-  $("hora").value = hora;
-  actualizarHoraSeleccionada(hora);
-  $("fecha").value = $("modal-fecha").value; // el turno queda en el día elegido
-  $("modal-horarios").close();
-  $("nombre").focus();
-}
-
-function actualizarHoraSeleccionada(hora) {
-  const etiqueta = hora ? "Cambiar hora, " + hora : "Elegir hora disponible";
-  $("hora-seleccionada").textContent = hora || "Elegir hora";
-  $("btn-horarios").setAttribute("aria-label", etiqueta);
-  $("btn-horarios").title = etiqueta;
-}
-// Caja
-
-const pesos = (n) => "$" + Math.round(n).toLocaleString("es-AR");
+let accionConfirmada = null;
 
 function confirmar(texto, accion, textoBoton = "Borrar") {
+  accionConfirmada = accion;
   $("confirmar-texto").textContent = texto;
   $("btn-confirmar-si").textContent = textoBoton;
-
-  $("btn-confirmar-si").onclick = () => {
-    $("modal-confirmar").close();
-    accion();
-  };
-  $("btn-confirmar-no").onclick = () => $("modal-confirmar").close();
-
   $("modal-confirmar").showModal();
 }
 
@@ -398,11 +346,496 @@ function confirmarBorrado(registros, id, mensaje, redibujar, mensajeExito) {
   });
 }
 
-function configurado() {
-  return datos.servicios.length > 0 && datos.porcentaje > 0;
+let accionPrecio = null;
+
+function pedirPrecio(titulo, precioActual, alGuardar) {
+  accionPrecio = alGuardar;
+  $("precio-titulo").textContent = titulo;
+  $("precio-valor").value = precioActual;
+  $("precio-error").textContent = "";
+  $("modal-precio").showModal();
+  $("precio-valor").select();
 }
 
-// ---------- Configuración: porcentaje y servicios ----------
+function guardarPrecioPedido() {
+  const precio = Number($("precio-valor").value);
+  if (!(precio > 0)) {
+    $("precio-error").textContent = "Poné un precio mayor a cero";
+    $("precio-valor").focus();
+    return;
+  }
+  const accion = accionPrecio;
+  accionPrecio = null;
+  $("modal-precio").close();
+  if (accion) accion(precio);
+}
+
+function cambiarPrecio(registros, id, titulo, redibujar) {
+  const registro = registros.find((r) => r.id === id);
+  if (!registro) return;
+
+  pedirPrecio(titulo(registro), registro.precio, (precio) => {
+    registro.precio = precio;
+    guardar();
+    redibujar();
+    mostrarToast("Precio actualizado");
+  });
+}
+
+// =====================================================
+// WHATSAPP
+// =====================================================
+
+function formatearTelefono(telefono) {
+  let numero = telefono.replace(/\D/g, "");
+  if (numero.startsWith("54")) return numero;
+  numero = numero.replace(/^0/, "");
+  return "549" + numero;
+}
+
+function telefonoValido(telefono) {
+  const digitos = telefono.replace(/\D/g, "");
+  return digitos.length >= 8 && digitos.length <= 15;
+}
+
+function armarMensaje(turno) {
+  const valores = {
+    nombre: turno.nombre,
+    dia: nombreDelDia(turno.fecha),
+    hora: turno.hora,
+    negocio: datos.negocio || "nuestro local",
+  };
+  const plantilla = (datos.plantilla || "").trim() || PLANTILLA_INICIAL;
+
+  // Un solo recorrido: si el nombre del cliente contiene "{hora}" no se reemplaza
+  return plantilla.replace(
+    /\{(nombre|dia|hora|negocio)\}/g,
+    (_, clave) => valores[clave],
+  );
+}
+
+function enviarRecordatorio(id) {
+  const turno = buscarTurno(id);
+  if (!turno || !telefonoValido(turno.telefono)) {
+    mostrarToast("El WhatsApp no es válido");
+    return;
+  }
+  const link =
+    "https://wa.me/" +
+    formatearTelefono(turno.telefono) +
+    "?text=" +
+    encodeURIComponent(armarMensaje(turno));
+  window.open(link, "_blank", "noopener,noreferrer");
+}
+
+// =====================================================
+// HORARIOS DISPONIBLES
+// =====================================================
+
+const ocupaHorario = (turno) => !ESTADOS_SIN_LUGAR.includes(turno.estado);
+
+function horariosDelDia(fecha) {
+  const { inicio, fin, duracion } = datos.horario;
+  if (
+    !fechaValida(fecha) ||
+    !horaValida(inicio) ||
+    !horaValida(fin) ||
+    !Number.isInteger(duracion) ||
+    duracion < 5 ||
+    duracion > 480 ||
+    aMinutos(inicio) >= aMinutos(fin)
+  ) {
+    return [];
+  }
+
+  // Minutos de los turnos que siguen ocupando lugar ese día
+  const ocupados = datos.turnos
+    .filter((t) => t.fecha === fecha && ocupaHorario(t) && t.id !== editandoId)
+    .map((t) => aMinutos(t.hora));
+
+  const ahora = new Date();
+  const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
+  const esHoy = fecha === hoyISO();
+  const lista = [];
+
+  for (let m = aMinutos(inicio); m < aMinutos(fin); m += duracion) {
+    const ocupado = ocupados.some((o) => o >= m && o < m + duracion);
+    const pasado = esHoy && m <= minutosAhora;
+    lista.push({ hora: aTexto(m), libre: !ocupado && !pasado });
+  }
+  return lista;
+}
+
+const horarioLibre = (fecha, hora) =>
+  horariosDelDia(fecha).some((slot) => slot.hora === hora && slot.libre);
+
+// ¿Otro turno activo ya ocupa el lugar de este?
+function hayChoque(turno) {
+  const { duracion } = datos.horario;
+  const minutos = aMinutos(turno.hora);
+  return datos.turnos.some(
+    (otro) =>
+      otro.id !== turno.id &&
+      otro.fecha === turno.fecha &&
+      ocupaHorario(otro) &&
+      Math.abs(aMinutos(otro.hora) - minutos) < duracion,
+  );
+}
+
+function dibujarGrilla() {
+  const fecha = $("modal-fecha").value;
+  const grilla = $("modal-grilla");
+
+  if (!fechaValida(fecha) || fecha < hoyISO()) {
+    grilla.innerHTML = '<p class="texto-suave">Elegí hoy o una fecha futura.</p>';
+    return;
+  }
+
+  const horarios = horariosDelDia(fecha);
+  if (!horarios.some((h) => h.libre)) {
+    grilla.innerHTML =
+      '<p class="texto-suave">No quedan horarios libres ese día.</p>';
+    return;
+  }
+
+  grilla.innerHTML = horarios
+    .map((h) =>
+      h.libre
+        ? `<button type="button" data-accion="horario" data-hora="${h.hora}">${h.hora}</button>`
+        : `<button type="button" disabled aria-label="${h.hora}, no disponible">${h.hora}</button>`,
+    )
+    .join("");
+}
+
+function abrirModal() {
+  const fecha = $("fecha").value;
+  $("modal-fecha").min = hoyISO();
+  // Si la app quedó abierta de un día para otro, la fecha guardada puede ser vieja
+  $("modal-fecha").value = fecha && fecha >= hoyISO() ? fecha : hoyISO();
+  dibujarGrilla();
+  $("modal-horarios").showModal();
+}
+
+function elegirHorario(hora) {
+  $("hora").value = hora;
+  $("fecha").value = $("modal-fecha").value; // el turno queda en el día elegido
+  actualizarSeleccion();
+  $("modal-horarios").close();
+  ($("nombre").value.trim() ? $("btn-agregar") : $("nombre")).focus();
+}
+
+// Muestra en el formulario qué día y hora están elegidos
+function actualizarSeleccion() {
+  const hora = $("hora").value;
+  const fecha = $("fecha").value;
+  const etiqueta = hora ? "Cambiar horario, " + hora : "Elegir horario disponible";
+
+  $("hora-seleccionada").textContent = hora;
+  $("btn-horarios").classList.toggle("con-hora", Boolean(hora));
+  $("btn-horarios").setAttribute("aria-label", etiqueta);
+  $("btn-horarios").title = etiqueta;
+  $("resumen-turno").textContent = hora
+    ? `Turno ${nombreDelDia(fecha)} a las ${hora}`
+    : "Todavía no elegiste horario.";
+}
+
+// =====================================================
+// TURNOS
+// =====================================================
+
+const buscarTurno = (id) => datos.turnos.find((t) => t.id === id);
+
+function ponerModoFormulario(turnoEditado) {
+  const editando = Boolean(turnoEditado);
+  const texto = editando ? "Guardar cambios del turno" : "Agregar turno";
+  const boton = $("btn-agregar");
+
+  boton.innerHTML = `<i class="bi bi-${editando ? "check-lg" : "plus-lg"}" aria-hidden="true"></i>`;
+  boton.setAttribute("aria-label", texto);
+  boton.title = texto;
+
+  $("btn-cancelar-edicion").hidden = !editando;
+  // En un turno ya cobrado el día y la hora no se pueden mover
+  $("btn-horarios").disabled = Boolean(turnoEditado && turnoEditado.cobrado);
+}
+
+function limpiarFormulario({ enfocar = true } = {}) {
+  editandoId = null;
+  $("nombre").value = "";
+  $("hora").value = "";
+  $("fecha").value = hoyISO();
+  $("telefono").value = "";
+  ponerModoFormulario(null);
+  actualizarSeleccion();
+  if (enfocar) $("nombre").focus();
+}
+
+function errorDelTurno({ nombre, hora, fecha, telefono }, turnoEditado) {
+  if (!nombre) return { mensaje: "Escribí el nombre del cliente", campo: "nombre" };
+  if (nombre.length > MAX_NOMBRE) {
+    return {
+      mensaje: `El nombre no puede superar ${MAX_NOMBRE} caracteres`,
+      campo: "nombre",
+    };
+  }
+  if (!hora) return { mensaje: "Elegí un horario disponible", campo: "btn-horarios" };
+  if (!fechaValida(fecha) || fecha < hoyISO()) {
+    return { mensaje: "Elegí una fecha válida desde hoy", campo: "btn-horarios" };
+  }
+  if (telefono && !telefonoValido(telefono)) {
+    return { mensaje: "Revisá el número de WhatsApp", campo: "telefono" };
+  }
+
+  // Si se corrige solo el nombre o el teléfono, el horario no cambia
+  // y no hace falta que siga "libre" (puede que ya haya pasado).
+  const mismoHorario =
+    turnoEditado && turnoEditado.fecha === fecha && turnoEditado.hora === hora;
+
+  if (turnoEditado && turnoEditado.cobrado && !mismoHorario) {
+    return {
+      mensaje: "Turno cobrado: solo podés corregir el nombre y el WhatsApp",
+      campo: "nombre",
+    };
+  }
+  if (!mismoHorario && !horarioLibre(fecha, hora)) {
+    return { mensaje: "Ese horario ya no está disponible", campo: "btn-horarios" };
+  }
+  return null;
+}
+
+// Sirve para crear un turno nuevo y también para guardar una edición
+function guardarTurno() {
+  const turnoEditado = editandoId ? buscarTurno(editandoId) : null;
+
+  if (editandoId && !turnoEditado) {
+    // El turno se borró (por ejemplo desde otra pestaña) mientras se editaba
+    limpiarFormulario();
+    mostrarToast("Ese turno ya no existe");
+    return;
+  }
+
+  const campos = {
+    nombre: $("nombre").value.trim(),
+    hora: $("hora").value,
+    fecha: $("fecha").value,
+    telefono: $("telefono").value.trim(),
+  };
+
+  const error = errorDelTurno(campos, turnoEditado);
+  if (error) {
+    mostrarToast(error.mensaje);
+    $(error.campo).focus();
+    return;
+  }
+
+  if (turnoEditado) {
+    Object.assign(turnoEditado, campos);
+    // El cobro guarda una copia del nombre: se mantiene al día
+    const corte = datos.cortes.find((c) => c.turnoId === turnoEditado.id);
+    if (corte) corte.nombre = turnoEditado.nombre;
+    mostrarToast("Turno corregido");
+  } else {
+    datos.turnos.push({
+      id: nuevoId(),
+      ...campos,
+      estado: "pendiente",
+      cobrado: false,
+    });
+    mostrarToast("Turno agregado");
+  }
+
+  guardar();
+  limpiarFormulario();
+  dibujarLista();
+}
+
+// Carga los datos del turno en el formulario para corregirlos
+function editarTurno(id) {
+  const turno = buscarTurno(id);
+  if (!turno) return;
+  editandoId = id;
+
+  $("nombre").value = turno.nombre;
+  $("hora").value = turno.hora;
+  $("fecha").value = turno.fecha;
+  $("telefono").value = turno.telefono;
+  ponerModoFormulario(turno);
+  actualizarSeleccion();
+
+  $("nombre").focus();
+  window.scrollTo({ top: 0, behavior: scrollSuave() });
+  mostrarToast("Corregí y tocá ✓");
+}
+
+function cancelarEdicion() {
+  limpiarFormulario();
+  mostrarToast("Edición cancelada");
+}
+
+function cambiarEstado(id, nuevoEstado) {
+  const turno = buscarTurno(id);
+  if (!turno || !ESTADOS_TURNO.includes(nuevoEstado)) return;
+
+  if (turno.cobrado && nuevoEstado !== "confirmado") {
+    mostrarToast("Ese turno ya está cobrado");
+    return;
+  }
+  if (nuevoEstado === "ausente" && !pasoElHorarioDelTurno(turno)) {
+    mostrarToast("Todavía no pasó el horario del turno");
+    return;
+  }
+  // Reactivar un turno cancelado o ausente: su lugar pudo ser tomado por otro
+  if (
+    !ESTADOS_SIN_LUGAR.includes(nuevoEstado) &&
+    !ocupaHorario(turno) &&
+    hayChoque(turno)
+  ) {
+    mostrarToast("Ese horario ya lo ocupa otro turno");
+    return;
+  }
+
+  turno.estado = nuevoEstado;
+  guardar();
+  dibujarLista();
+  mostrarToast("Turno " + nuevoEstado);
+}
+
+function borrarTurno(id) {
+  const turno = buscarTurno(id);
+  if (!turno) return;
+
+  const aviso = turno.cobrado ? " El cobro se mantiene en la Caja." : "";
+  confirmar(`¿Borrar el turno de ${turno.nombre} (${turno.hora})?${aviso}`, () => {
+    datos.turnos = datos.turnos.filter((t) => t.id !== id);
+    // Si justo se estaba editando, se cancela la edición
+    if (editandoId === id) limpiarFormulario({ enfocar: false });
+    guardar();
+    dibujarLista();
+    mostrarToast("Turno borrado");
+  });
+}
+
+// =====================================================
+// LISTA DE TURNOS
+// =====================================================
+
+function htmlDeTurno(turno) {
+  const nombre = esc(turno.nombre);
+  const apagado = ocupaHorario(turno) ? "" : "apagada";
+  const paso = pasoElHorarioDelTurno(turno);
+
+  const boton = (accion, icono, etiqueta, clase = "") => `
+    <button type="button" class="${clase}" data-accion="${accion}" data-id="${turno.id}"
+      aria-label="${etiqueta}, ${nombre}" title="${etiqueta}">
+      <i class="bi bi-${icono}" aria-hidden="true"></i>
+    </button>`;
+
+  // El botón de WhatsApp existe solo si cargaron teléfono
+  const botonWhatsapp = turno.telefono
+    ? `<button type="button" class="btn-whatsapp" data-accion="recordar" data-id="${turno.id}"
+         aria-label="Recordar por WhatsApp, ${nombre}">
+         <i class="bi bi-whatsapp" aria-hidden="true"></i> Recordar
+       </button>`
+    : "";
+
+  let botonCobrar = "";
+  if (turno.cobrado) {
+    botonCobrar = `<span class="texto-suave cobrado"><i class="bi bi-cash-coin" aria-hidden="true"></i> Cobrado</span>`;
+  } else if (paso && ocupaHorario(turno)) {
+    botonCobrar = boton("cobrar", "cash-coin", "Cobrar");
+  }
+
+  const botonesEstado = turno.cobrado
+    ? ""
+    : boton("confirmar", "check-lg", "Confirmar turno") +
+      boton("cancelar", "x-lg", "Cancelar turno") +
+      (paso ? boton("ausente", "person-x", "Marcar ausente") : "");
+
+  return `
+    <li class="tarjeta turno ${apagado}" data-estado="${turno.estado}">
+      <div class="turno-cabecera">
+        <div class="turno-datos">
+          <span class="hora">${turno.hora}</span>
+          <span class="turno-nombre">${nombre}</span>
+        </div>
+        <span class="estado ${turno.estado}">${turno.estado}</span>
+      </div>
+      <div class="acciones">
+        ${botonWhatsapp}
+        ${botonCobrar}
+        ${botonesEstado}
+        ${boton("editar", "pencil", "Editar turno")}
+        ${boton("borrar", "trash", "Borrar turno")}
+      </div>
+    </li>`;
+}
+
+function dibujarLista() {
+  // Al redibujar se pierde el foco: se guarda cuál botón lo tenía para devolvérselo
+  const activo = document.activeElement;
+  const focoPrevio =
+    activo && $("lista").contains(activo) && activo.dataset.accion
+      ? { accion: activo.dataset.accion, id: activo.dataset.id }
+      : null;
+
+  const hoy = hoyISO();
+  const proximos = datos.turnos
+    .filter((t) => t.fecha >= hoy)
+    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+
+  // "Próximos" = turnos activos que todavía no llegaron
+  const cantidad = proximos.filter(
+    (t) => ocupaHorario(t) && !pasoElHorarioDelTurno(t),
+  ).length;
+  $("contador").textContent = plural(cantidad, "próximo", "próximos");
+
+  if (proximos.length === 0) {
+    $("lista").innerHTML =
+      '<div class="vacio">Sin turnos. Escribí un nombre y elegí un horario.</div>';
+  } else {
+    let html = "";
+    let diaAnterior = "";
+
+    proximos.forEach((turno) => {
+      if (turno.fecha !== diaAnterior) {
+        if (diaAnterior) html += "</ul>";
+        diaAnterior = turno.fecha;
+        html += `<h2 class="dia">${esc(tituloDelDia(turno.fecha))}</h2><ul class="turnos">`;
+      }
+      html += htmlDeTurno(turno);
+    });
+    $("lista").innerHTML = html + "</ul>";
+  }
+
+  if (focoPrevio) {
+    const lista = $("lista");
+    const mismo =
+      lista.querySelector(
+        `[data-accion="${focoPrevio.accion}"][data-id="${focoPrevio.id}"]`,
+      ) || lista.querySelector(`[data-id="${focoPrevio.id}"]`);
+    (mismo || lista).focus({ preventScroll: true });
+  }
+}
+
+// Los botones "Cobrar" y "Ausente" dependen de la hora: se refrescan solos
+function refrescarSiHaceFalta() {
+  if (document.querySelector("dialog[open]")) return;
+  if ($("lista").contains(document.activeElement)) return;
+  dibujarLista();
+}
+
+// =====================================================
+// CONFIGURACIÓN: porcentaje y servicios
+// =====================================================
+
+const configurado = () => datos.servicios.length > 0 && datos.porcentaje > 0;
+
+function exigirConfiguracion() {
+  if (configurado()) return true;
+  mostrarToast("Primero cargá tu porcentaje y al menos un servicio");
+  abrirConfig();
+  return false;
+}
 
 function abrirConfig() {
   $("cfg-porcentaje").value = datos.porcentaje || "";
@@ -416,10 +849,12 @@ function guardarConfig() {
 
   if (!(porcentaje > 0 && porcentaje <= 100)) {
     $("cfg-error").textContent = "El porcentaje tiene que estar entre 1 y 100";
+    $("cfg-porcentaje").focus();
     return;
   }
   if (datos.servicios.length === 0) {
     $("cfg-error").textContent = "Agregá al menos un servicio";
+    $("srv-nombre").focus();
     return;
   }
 
@@ -440,13 +875,17 @@ function dibujarServicios() {
     .map(
       (s) => `
     <div class="fila-corte">
-      <span>${limpiarTexto(s.nombre)}</span>
-      <span>
-        <button onclick="cambiarPrecioServicio(${s.id})">${pesos(s.precio)}</button>
-        <button onclick="borrarServicio(${s.id})" aria-label="Borrar servicio"><i class="bi bi-trash"></i></button>
+      <span>${esc(s.nombre)}</span>
+      <span class="acciones-fila">
+        <button type="button" data-accion="precio-servicio" data-id="${s.id}"
+          aria-label="Cambiar precio de ${esc(s.nombre)}, ahora ${pesos(s.precio)}"
+          title="Cambiar precio">${pesos(s.precio)}</button>
+        <button type="button" data-accion="borrar-servicio" data-id="${s.id}"
+          aria-label="Borrar servicio ${esc(s.nombre)}" title="Borrar servicio">
+          <i class="bi bi-trash" aria-hidden="true"></i>
+        </button>
       </span>
-    </div>
-  `,
+    </div>`,
     )
     .join("");
 }
@@ -459,8 +898,12 @@ function agregarServicio() {
     $("cfg-error").textContent = "Poné el nombre y el precio del servicio";
     return;
   }
+  if (nombre.length > MAX_SERVICIO) {
+    $("cfg-error").textContent = `El nombre no puede superar ${MAX_SERVICIO} caracteres`;
+    return;
+  }
 
-  datos.servicios.push({ id: Date.now(), nombre, precio });
+  datos.servicios.push({ id: nuevoId(), nombre, precio });
   guardar();
 
   $("srv-nombre").value = "";
@@ -474,8 +917,8 @@ function cambiarPrecioServicio(id) {
   cambiarPrecio(
     datos.servicios,
     id,
-    dibujarServicios,
     (servicio) => "Nuevo precio de " + servicio.nombre,
+    dibujarServicios,
   );
 }
 
@@ -490,18 +933,14 @@ function borrarServicio(id) {
   );
 }
 
-// ---------- Cobros ----------
+// =====================================================
+// COBROS
+// =====================================================
 
-function horaActual() {
-  const ahora = new Date();
-  return (
-    String(ahora.getHours()).padStart(2, "0") +
-    ":" +
-    String(ahora.getMinutes()).padStart(2, "0")
-  );
-}
+// Id del turno que se está cobrando mientras se elige el servicio
+let turnoACobrarId = null;
 
-function registrarCorte(
+function registrarCorte({
   nombre,
   servicio,
   precio,
@@ -509,9 +948,9 @@ function registrarCorte(
   hora = horaActual(),
   turnoId = null,
   manual = false,
-) {
+}) {
   datos.cortes.push({
-    id: Date.now(),
+    id: nuevoId(),
     fecha,
     hora,
     nombre,
@@ -523,77 +962,77 @@ function registrarCorte(
   });
 }
 
+// Devuelve el motivo por el que un turno no se puede cobrar, o null si se puede
+function motivoNoCobrable(turno) {
+  if (turno.cobrado) return "Ese turno ya está cobrado";
+  if (!ocupaHorario(turno)) {
+    return `El turno está ${turno.estado}. Confirmalo antes de cobrar.`;
+  }
+  if (!pasoElHorarioDelTurno(turno)) return "Todavía no llegó el horario del turno";
+  return null;
+}
+
 // Botón "$" de un turno
 function cobrarTurno(id) {
-  if (!configurado()) {
-    abrirConfig();
+  if (!exigirConfiguracion()) return;
+
+  const turno = buscarTurno(id);
+  if (!turno) return;
+
+  const motivo = motivoNoCobrable(turno);
+  if (motivo) {
+    mostrarToast(motivo);
     return;
   }
 
-  const turno = datos.turnos.find((t) => t.id === id);
-  if (!turno || turno.cobrado) return;
-
-if (!pasoElHorarioDelTurno(turno)) {
-  mostrarToast("Todavía no llegó el horario del turno");
-  return;
-}
-  if (turno.estado === "cancelado" || turno.estado === "ausente") {
-    mostrarToast(
-      "El turno está " + turno.estado + ". Confirmalo antes de cobrar.",
-    );
-    return;
-  }
   // Con un solo servicio no hace falta preguntar
   if (datos.servicios.length === 1) {
     cobrarConServicio(id, datos.servicios[0].id);
     return;
   }
 
+  turnoACobrarId = id;
   $("elegir-titulo").textContent = "¿Qué le hiciste a " + turno.nombre + "?";
   $("elegir-lista").innerHTML = datos.servicios
     .map(
       (s) => `
-    <button onclick="cobrarConServicio(${id}, ${s.id})">
-      <span>${limpiarTexto(s.nombre)}</span>
+    <button type="button" data-accion="servicio" data-id="${s.id}">
+      <span>${esc(s.nombre)}</span>
       <strong>${pesos(s.precio)}</strong>
-    </button>
-  `,
+    </button>`,
     )
     .join("");
   $("modal-elegir").showModal();
 }
 
 function cobrarConServicio(turnoId, servicioId) {
-  const turno = datos.turnos.find((t) => t.id === turnoId);
+  const turno = buscarTurno(turnoId);
   const servicio = datos.servicios.find((s) => s.id === servicioId);
-  if (!turno || !servicio || turno.cobrado) return;
 
-if (turno.estado === "cancelado" || turno.estado === "ausente") {
   if ($("modal-elegir").open) $("modal-elegir").close();
-  mostrarToast("El turno está " + turno.estado + ". No se puede cobrar.");
-  return;
-}
+  if (!turno || !servicio) return;
 
-if (!pasoElHorarioDelTurno(turno)) {
-  if ($("modal-elegir").open) $("modal-elegir").close();
-  mostrarToast("Todavía no llegó el horario del turno");
-  return;
-}
-  registrarCorte(
-    turno.nombre,
-    servicio.nombre,
-    servicio.precio,
-    turno.fecha,
-    turno.hora,
-    turno.id,
-  );
+  // Se vuelve a chequear: el estado pudo cambiar mientras el diálogo estaba abierto
+  const motivo = motivoNoCobrable(turno);
+  if (motivo) {
+    mostrarToast(motivo);
+    return;
+  }
+
+  registrarCorte({
+    nombre: turno.nombre,
+    servicio: servicio.nombre,
+    precio: servicio.precio,
+    fecha: turno.fecha,
+    hora: turno.hora,
+    turnoId: turno.id,
+  });
   turno.cobrado = true;
   turno.estado = "confirmado";
   guardar();
 
-  if ($("modal-elegir").open) $("modal-elegir").close();
   dibujarLista();
-  mostrarToast("Cobrado " + servicio.nombre + " " + pesos(servicio.precio));
+  mostrarToast(`Cobrado ${servicio.nombre} ${pesos(servicio.precio)}`);
 }
 
 function agregarCorteManual() {
@@ -602,17 +1041,25 @@ function agregarCorteManual() {
   );
   if (!servicio) {
     mostrarToast("Elegí un servicio");
+    $("corte-servicio").focus();
     return;
   }
 
   const nombre = $("corte-nombre").value.trim() || "Sin nombre";
   const hora = $("corte-hora").value;
   const fecha = $("panel-fecha").value;
-  if (!fechaValida(fecha)) {
-    mostrarToast("Elegí una fecha válida");
+
+  if (nombre.length > MAX_NOMBRE) {
+    mostrarToast(`El nombre no puede superar ${MAX_NOMBRE} caracteres`);
+    $("corte-nombre").focus();
     return;
   }
-  if (!PATRON_HORA.test(hora || "")) {
+  if (!fechaValida(fecha)) {
+    mostrarToast("Elegí una fecha válida");
+    $("panel-fecha").focus();
+    return;
+  }
+  if (!horaValida(hora)) {
     mostrarToast("Elegí un horario válido");
     $("corte-hora").focus();
     return;
@@ -621,47 +1068,33 @@ function agregarCorteManual() {
     mostrarToast("No podés registrar un corte en una fecha futura");
     return;
   }
-  if (fecha === hoyISO()) {
-    const fechaHoraCorte = new Date(fecha + "T" + hora + ":00");
-    if (fechaHoraCorte > new Date()) {
-      mostrarToast("No podés registrar un corte en un horario futuro");
-      return;
-    }
+  if (fecha === hoyISO() && hora > horaActual()) {
+    mostrarToast("No podés registrar un corte en un horario futuro");
+    $("corte-hora").focus();
+    return;
   }
 
-  registrarCorte(
+  registrarCorte({
     nombre,
-    servicio.nombre,
-    servicio.precio,
-    $("panel-fecha").value,
+    servicio: servicio.nombre,
+    precio: servicio.precio,
+    fecha,
     hora,
-    null,
-    true,
-  );
+    manual: true,
+  });
   guardar();
   $("corte-nombre").value = "";
   dibujarPanel();
-}
-
-function cambiarPrecio(
-  registros,
-  id,
-  redibujar,
-  textoPregunta = () => "Nuevo precio",
-) {
-  const registro = registros.find((r) => r.id === id);
-  if (!registro) return;
-
-  const nuevo = Number(prompt(textoPregunta(registro), registro.precio));
-  if (!(nuevo > 0)) return;
-
-  registro.precio = nuevo;
-  guardar();
-  redibujar();
+  mostrarToast("Corte registrado");
 }
 
 function cambiarPrecioCorte(id) {
-  cambiarPrecio(datos.cortes, id, dibujarPanel);
+  cambiarPrecio(
+    datos.cortes,
+    id,
+    (corte) => "Nuevo precio del corte de " + corte.nombre,
+    dibujarPanel,
+  );
 }
 
 function borrarCorte(id) {
@@ -673,50 +1106,29 @@ function borrarCorte(id) {
     "Corte borrado",
   );
 }
+
+// =====================================================
+// CAJA
+// =====================================================
+
 function abrirPanel() {
-  if (!configurado()) {
-    abrirConfig();
-    return;
-  }
-  $("panel-fecha").value = $("panel-fecha").value || hoyISO();
+  if (!exigirConfiguracion()) return;
+
   $("panel-fecha").max = hoyISO();
-  $("corte-hora").value = $("corte-hora").value || horaActual();
+  if (!fechaValida($("panel-fecha").value)) $("panel-fecha").value = hoyISO();
+  $("corte-hora").value = horaActual();
   dibujarPanel();
   $("panel-caja").showModal();
 }
 
-// ---------- Panel ----------
-
-function dibujarPanel() {
-  // Selector de servicios de la carga manual (conserva lo elegido)
-  const elegido = $("corte-servicio").value;
-  $("corte-servicio").innerHTML = datos.servicios
-    .map(
-      (s) =>
-        `<option value="${s.id}">${limpiarTexto(s.nombre)} · ${pesos(s.precio)}</option>`,
-    )
-    .join("");
-  if (elegido) $("corte-servicio").value = elegido;
-
-  const verMes = $("panel-modo").value === "mes";
-  const fecha = $("panel-fecha").value;
-
-  const lista = datos.cortes
-    .filter((c) =>
-      verMes ? c.fecha.slice(0, 7) === fecha.slice(0, 7) : c.fecha === fecha,
-    )
-    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
-
-  const resumen = lista.reduce(
+function resumirCortes(lista) {
+  return lista.reduce(
     (resultado, corte) => {
       resultado.total += corte.precio;
       resultado.paraMi += (corte.precio * corte.porcentaje) / 100;
 
       const nombre = corte.servicio || "Corte";
-      const detalle = resultado.porServicio.get(nombre) || {
-        cantidad: 0,
-        total: 0,
-      };
+      const detalle = resultado.porServicio.get(nombre) || { cantidad: 0, total: 0 };
       detalle.cantidad++;
       detalle.total += corte.precio;
       resultado.porServicio.set(nombre, detalle);
@@ -724,6 +1136,48 @@ function dibujarPanel() {
     },
     { total: 0, paraMi: 0, porServicio: new Map() },
   );
+}
+
+function htmlDeCorte(corte, verMes) {
+  const dia = verMes ? `${corte.fecha.slice(8)}/${corte.fecha.slice(5, 7)} · ` : "";
+  const nombre = esc(corte.nombre);
+  return `
+    <div class="fila-corte">
+      <span>
+        ${dia}${corte.hora} · ${nombre}
+        <span class="texto-suave detalle">${esc(corte.servicio || "Corte")}</span>
+      </span>
+      <span class="acciones-fila">
+        <button type="button" data-accion="precio-corte" data-id="${corte.id}"
+          aria-label="Cambiar precio del corte de ${nombre}, ahora ${pesos(corte.precio)}"
+          title="Cambiar precio">${pesos(corte.precio)}</button>
+        <button type="button" data-accion="borrar-corte" data-id="${corte.id}"
+          aria-label="Borrar corte de ${nombre}" title="Borrar corte">
+          <i class="bi bi-trash" aria-hidden="true"></i>
+        </button>
+      </span>
+    </div>`;
+}
+
+function dibujarPanel() {
+  // Selector de servicios de la carga manual (conserva lo elegido)
+  const selector = $("corte-servicio");
+  const elegido = selector.value;
+  selector.innerHTML = datos.servicios
+    .map((s) => `<option value="${s.id}">${esc(s.nombre)} · ${pesos(s.precio)}</option>`)
+    .join("");
+  if (elegido) selector.value = elegido;
+
+  const verMes = $("panel-modo").value === "mes";
+  const fecha = fechaValida($("panel-fecha").value) ? $("panel-fecha").value : hoyISO();
+
+  const lista = datos.cortes
+    .filter((c) =>
+      verMes ? c.fecha.slice(0, 7) === fecha.slice(0, 7) : c.fecha === fecha,
+    )
+    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+
+  const resumen = resumirCortes(lista);
 
   $("panel-resumen").innerHTML = `
     <div><span class="texto-suave">Cortes</span><strong>${lista.length}</strong></div>
@@ -735,136 +1189,48 @@ function dibujarPanel() {
     .map(
       ([nombre, detalle]) => `
     <div class="fila-corte">
-      <span>${limpiarTexto(nombre)} × ${detalle.cantidad}</span>
+      <span>${esc(nombre)} × ${detalle.cantidad}</span>
       <strong>${pesos(detalle.total)}</strong>
-    </div>
-  `,
+    </div>`,
     )
     .join("");
 
-  if (lista.length === 0) {
-    $("panel-lista").innerHTML =
-      '<div class="vacio">Todavía no hay cortes registrados.</div>';
-    return;
-  }
-
-  $("panel-lista").innerHTML = lista
-    .map(
-      (c) => `
-    <div class="fila-corte">
-      <span>
-        ${verMes ? c.fecha.slice(8) + "/" + c.fecha.slice(5, 7) + " · " : ""}${c.hora} · ${limpiarTexto(c.nombre)}
-        <span class="texto-suave">${limpiarTexto(c.servicio || "Corte")}</span>
-      </span>
-      <span>
-        <button onclick="cambiarPrecioCorte(${c.id})">${pesos(c.precio)}</button>
-        <button onclick="borrarCorte(${c.id})" aria-label="Borrar corte"><i class="bi bi-trash"></i></button>
-      </span>
-    </div>
-  `,
-    )
-    .join("");
-}
-// Lista de turnos
-
-function limpiarTexto(texto) {
-  const div = document.createElement("div");
-  div.textContent = texto;
-  return div.innerHTML;
+  $("panel-lista").innerHTML =
+    lista.length === 0
+      ? '<div class="vacio">Todavía no hay cortes registrados.</div>'
+      : lista.map((c) => htmlDeCorte(c, verMes)).join("");
 }
 
-function htmlDeTurno(turno) {
-  const apagado =
-    turno.estado === "cancelado" || turno.estado === "ausente" ? "apagada" : "";
-  const puedeMarcarAusente = pasoElHorarioDelTurno(turno);
-  // El botón de WhatsApp existe solo si cargaron teléfono
-  const botonWhatsapp = turno.telefono
-    ? `<button class="btn-whatsapp" onclick="enviarRecordatorio(${turno.id})">
-         <i class="bi bi-whatsapp"></i> Recordar
-       </button>`
-    : "";
-  const horarioTodaviaNoLlego = !pasoElHorarioDelTurno(turno);
-  const sinCobro = turno.estado === "cancelado" || turno.estado === "ausente";
-
-  const botonCobrar = turno.cobrado
-    ? `<span class="texto-suave"><i class="bi bi-cash-coin"></i> Cobrado</span>`
-    : horarioTodaviaNoLlego || sinCobro
-      ? ""
-      : `<button onclick="cobrarTurno(${turno.id})" aria-label="Cobrar"><i class="bi bi-cash-coin"></i></button>`;
-
-  const botonAusente = puedeMarcarAusente
-  ? `<button onclick="cambiarEstado(${turno.id}, 'ausente')" aria-label="Ausente">
-       <i class="bi bi-person-x"></i>
-     </button>`
-  : "";
-
-const botonesEstado = turno.cobrado
-  ? ""
-  : `
-    <button onclick="cambiarEstado(${turno.id}, 'confirmado')" aria-label="Confirmar">
-      <i class="bi bi-check-lg"></i>
-    </button>
-    <button onclick="cambiarEstado(${turno.id}, 'cancelado')" aria-label="Cancelar">
-      <i class="bi bi-x-lg"></i>
-    </button>
-    ${botonAusente}`;
-  return `
-    <div class="tarjeta ${apagado}">
-      <div class="turno-cabecera">
-        <div>
-          <span class="hora">${turno.hora}</span> · ${limpiarTexto(turno.nombre)}
-        </div>
-        <span class="estado ${turno.estado}">${turno.estado}</span>
-      </div>
-
-      <div class="acciones">
-        ${botonWhatsapp}
-        ${botonCobrar}
-        ${botonesEstado}
-        <button onclick="editarTurno(${turno.id})" aria-label="Editar"><i class="bi bi-pencil"></i></button>
-        <button onclick="borrarTurno(${turno.id})" aria-label="Borrar"><i class="bi bi-trash"></i></button>
-      </div>
-    </div>
-  `;
-}
-
-function dibujarLista() {
-  const proximos = datos.turnos
-    .filter((t) => t.fecha >= hoyISO())
-    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
-const cantidadProximos = proximos.filter(
-  (t) =>
-    t.estado !== "cancelado" &&
-    t.estado !== "ausente",
-).length;
-
-  $("contador").textContent = cantidadProximos + " próximos";
-
-  if (proximos.length === 0) {
-    $("lista").innerHTML =
-      '<div class="vacio">Sin turnos. Escribí un nombre y una hora.</div>';
-    return;
-  }
-
-  let html = "";
-  let diaAnterior = "";
-
-  proximos.forEach((turno) => {
-    if (turno.fecha !== diaAnterior) {
-      diaAnterior = turno.fecha;
-      html += `<h2>${nombreDelDia(turno.fecha)}</h2>`;
-    }
-    html += htmlDeTurno(turno);
-  });
-
-  $("lista").innerHTML = html;
-}
 // =====================================================
 // HISTORIAL
 // =====================================================
 
-const fechaCorta = (f) =>
-  f.slice(8) + "/" + f.slice(5, 7) + "/" + f.slice(0, 4);
+// Un cobro aparece suelto en el historial si no tiene un turno que lo represente:
+// carga manual, turno borrado, o cobros viejos sin turnoId.
+function esCorteSuelto(corte) {
+  if (corte.manual) return true;
+  if (corte.turnoId != null) {
+    return !datos.turnos.some((t) => t.id === corte.turnoId);
+  }
+  const nombre = sinAcentos(corte.nombre);
+  return !datos.turnos.some(
+    (t) => t.cobrado && t.fecha === corte.fecha && sinAcentos(t.nombre) === nombre,
+  );
+}
+
+function turnosAnteriores(busqueda) {
+  const hoy = hoyISO();
+  const coincide = (nombre) => !busqueda || sinAcentos(nombre).includes(busqueda);
+
+  const turnos = datos.turnos.filter((t) => t.fecha < hoy && coincide(t.nombre));
+  const cobrosSueltos = datos.cortes
+    .filter((c) => c.fecha < hoy && coincide(c.nombre) && esCorteSuelto(c))
+    .map((c) => ({ ...c, estado: "atendido" }));
+
+  return [...turnos, ...cobrosSueltos].sort((a, b) =>
+    (b.fecha + b.hora).localeCompare(a.fecha + a.hora),
+  );
+}
 
 function abrirHistorial() {
   $("hist-buscar").value = "";
@@ -873,58 +1239,28 @@ function abrirHistorial() {
 }
 
 function dibujarHistorial() {
-  const texto = $("hist-buscar").value.trim().toLowerCase();
-
-  const turnosPasados = datos.turnos
-    .filter(
-      (t) =>
-        t.fecha < hoyISO() &&
-        (!texto || (t.nombre || "").toLowerCase().includes(texto)),
-    )
-    .map((t) => ({ ...t }));
-  const cortesManuales = datos.cortes
-    .filter((corte) => {
-      if (corte.fecha >= hoyISO()) return false;
-      if (!corte.manual && corte.turnoId == null) {
-        const turnoCobrado = datos.turnos.some(
-          (turno) =>
-            turno.cobrado &&
-            turno.fecha === corte.fecha &&
-            (turno.nombre || "").toLowerCase() ===
-              (corte.nombre || "").toLowerCase(),
-        );
-        if (turnoCobrado) return false;
-      }
-      return !texto || (corte.nombre || "").toLowerCase().includes(texto);
-    })
-    .filter(
-      (corte) =>
-        corte.manual ||
-        corte.turnoId == null ||
-        !datos.turnos.some((turno) => turno.id === corte.turnoId),
-    )
-    .map((corte) => ({ ...corte, estado: "atendido" }));
-  const pasados = [...turnosPasados, ...cortesManuales].sort((a, b) =>
-    (b.fecha + b.hora).localeCompare(a.fecha + a.hora),
-  );
+  const busqueda = sinAcentos($("hist-buscar").value.trim());
+  const pasados = turnosAnteriores(busqueda);
 
   if (pasados.length === 0) {
-    $("hist-lista").innerHTML =
-      '<div class="vacio">No hay turnos anteriores.</div>';
+    $("hist-lista").innerHTML = `<div class="vacio">${
+      busqueda ? "No hay turnos anteriores para esa búsqueda." : "No hay turnos anteriores."
+    }</div>`;
     return;
   }
 
   // Al buscar un cliente, un resumen de sus visitas
   let resumen = "";
-  if (texto) {
+  if (busqueda) {
     const ausencias = pasados.filter((t) => t.estado === "ausente").length;
     const atendidos = pasados.filter(
-      (t) =>
-        t.cobrado || t.estado === "confirmado" || t.estado === "atendido",
+      (t) => t.cobrado || t.estado === "confirmado" || t.estado === "atendido",
     ).length;
     resumen = `
       <div class="tarjeta">
-        <strong>${pasados.length} turnos</strong> · ${atendidos} atendidos · ${ausencias} ausencias
+        <strong>${plural(pasados.length, "turno", "turnos")}</strong> ·
+        ${plural(atendidos, "atendido", "atendidos")} ·
+        ${plural(ausencias, "ausencia", "ausencias")}
         <div class="texto-suave">Última visita: ${fechaCorta(pasados[0].fecha)}</div>
       </div>`;
   }
@@ -935,75 +1271,176 @@ function dibujarHistorial() {
       .map(
         (t) => `
     <div class="fila-corte">
-      <span>${fechaCorta(t.fecha)} · ${t.hora} · ${limpiarTexto(t.nombre)}</span>
+      <span>${fechaCorta(t.fecha)} · ${t.hora} · ${esc(t.nombre)}</span>
       <span class="estado ${t.estado}">${t.estado}</span>
-    </div>
-  `,
+    </div>`,
       )
       .join("");
 }
 
-// Inicio
-$("btn-horarios").onclick = abrirModal;
-$("modal-fecha").onchange = dibujarGrilla;
-$("btn-cerrar-modal").onclick = () => $("modal-horarios").close();
-cargar();
+// =====================================================
+// SINCRONIZACIÓN ENTRE PESTAÑAS
+// =====================================================
 
-$("fecha").value = hoyISO();
-$("negocio").value = datos.negocio;
-$("plantilla").value = datos.plantilla;
-
-$("btn-agregar").onclick = guardarTurno;
-// Guardar el mensaje de recordatorio apenas el usuario lo modifica
-$("negocio").oninput = (e) => {
-  datos.negocio = e.target.value;
-  guardar();
-};
-
-$("plantilla").oninput = (e) => {
-  datos.plantilla = e.target.value;
-  guardar();
-};
-
-// Enter en el nombre también guarda el turno
-$("nombre").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") guardarTurno();
-});
-
-$("btn-panel").onclick = abrirPanel;
-$("btn-cerrar-panel").onclick = () => $("panel-caja").close();
-$("btn-config").onclick = abrirConfig;
-$("btn-guardar-config").onclick = guardarConfig;
-$("btn-cancelar-config").onclick = () => $("modal-config").close();
-$("btn-corte").onclick = agregarCorteManual;
-$("panel-modo").onchange = dibujarPanel;
-$("panel-fecha").onchange = dibujarPanel;
-$("btn-srv-agregar").onclick = agregarServicio;
-$("btn-elegir-cancelar").onclick = () => $("modal-elegir").close();
-$("btn-historial").onclick = abrirHistorial;
-$("btn-cerrar-historial").onclick = () => $("modal-historial").close();
-$("hist-buscar").oninput = dibujarHistorial;
+function redibujarTodo() {
+  // Si el turno que se estaba editando ya no existe, se cancela la edición
+  if (editandoId && !buscarTurno(editandoId)) limpiarFormulario({ enfocar: false });
+  dibujarLista();
+  if ($("modal-historial").open) dibujarHistorial();
+  if ($("panel-caja").open) dibujarPanel();
+}
 
 window.addEventListener("storage", (evento) => {
   if (evento.key !== CLAVE_GUARDADO || !evento.newValue) return;
 
   try {
-    const datosActualizados = JSON.parse(evento.newValue);
-    if (!datosActualizados || !Array.isArray(datosActualizados.turnos)) {
+    const actualizados = JSON.parse(evento.newValue);
+    if (!actualizados || !Array.isArray(actualizados.turnos)) {
       throw new Error("Los datos guardados no contienen una lista de turnos");
     }
-
-    datos = { ...datos, ...datosActualizados };
-    dibujarLista();
-    if ($("modal-historial").open) dibujarHistorial();
+    datos = normalizar(actualizados);
+    redibujarTodo();
   } catch (error) {
     console.error("No se pudo sincronizar los turnos de otra pestaña", error);
   }
 });
 
-// Si se cierra la configuración (con Guardar, Cerrar o Esc), el panel se actualiza
-$("modal-config").addEventListener("close", () => {
-  if ($("panel-caja").open) dibujarPanel();
-});
+// =====================================================
+// INICIO
+// =====================================================
 
-dibujarLista();
+function iniciar() {
+  cargar();
+
+  $("fecha").value = hoyISO();
+  $("negocio").value = datos.negocio;
+  $("plantilla").value = datos.plantilla;
+  ponerModoFormulario(null);
+  actualizarSeleccion();
+
+  // Formulario de turnos (Enter en cualquier campo también envía)
+  $("form-turno").addEventListener("submit", (e) => {
+    e.preventDefault();
+    guardarTurno();
+  });
+  $("btn-cancelar-edicion").addEventListener("click", cancelarEdicion);
+  $("btn-horarios").addEventListener("click", abrirModal);
+
+  // Mensaje de recordatorio: se guarda apenas se modifica
+  $("negocio").addEventListener("input", (e) => {
+    datos.negocio = e.target.value;
+    guardar();
+  });
+  $("plantilla").addEventListener("input", (e) => {
+    datos.plantilla = e.target.value;
+    guardar();
+  });
+
+  // Lista de turnos y diálogos
+  alClickear("lista", {
+    recordar: enviarRecordatorio,
+    cobrar: cobrarTurno,
+    confirmar: (id) => cambiarEstado(id, "confirmado"),
+    cancelar: (id) => cambiarEstado(id, "cancelado"),
+    ausente: (id) => cambiarEstado(id, "ausente"),
+    editar: editarTurno,
+    borrar: borrarTurno,
+  });
+  alClickear("modal-grilla", { horario: (_, dataset) => elegirHorario(dataset.hora) });
+  alClickear("elegir-lista", {
+    servicio: (servicioId) => cobrarConServicio(turnoACobrarId, servicioId),
+  });
+  alClickear("cfg-servicios", {
+    "precio-servicio": cambiarPrecioServicio,
+    "borrar-servicio": borrarServicio,
+  });
+  alClickear("panel-lista", {
+    "precio-corte": cambiarPrecioCorte,
+    "borrar-corte": borrarCorte,
+  });
+
+  $("modal-fecha").addEventListener("change", dibujarGrilla);
+  $("btn-cerrar-modal").addEventListener("click", () => $("modal-horarios").close());
+
+  // Caja
+  $("btn-panel").addEventListener("click", abrirPanel);
+  $("btn-cerrar-panel").addEventListener("click", () => $("panel-caja").close());
+  $("panel-modo").addEventListener("change", dibujarPanel);
+  $("panel-fecha").addEventListener("change", dibujarPanel);
+  $("form-corte").addEventListener("submit", (e) => {
+    e.preventDefault();
+    agregarCorteManual();
+  });
+  $("btn-config").addEventListener("click", abrirConfig);
+
+  // Configuración
+  $("btn-guardar-config").addEventListener("click", guardarConfig);
+  $("btn-cancelar-config").addEventListener("click", () => $("modal-config").close());
+  $("form-servicio").addEventListener("submit", (e) => {
+    e.preventDefault();
+    agregarServicio();
+  });
+  $("cfg-porcentaje").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") guardarConfig();
+  });
+  // Si se cierra la configuración (con Guardar, Cerrar o Esc), el panel se actualiza
+  $("modal-config").addEventListener("close", () => {
+    if ($("panel-caja").open) dibujarPanel();
+  });
+
+  // Elegir servicio, confirmar y precio
+  $("btn-elegir-cancelar").addEventListener("click", () => $("modal-elegir").close());
+  $("modal-elegir").addEventListener("close", () => {
+    turnoACobrarId = null;
+  });
+  $("btn-confirmar-no").addEventListener("click", () => $("modal-confirmar").close());
+  $("btn-confirmar-si").addEventListener("click", () => {
+    const accion = accionConfirmada;
+    accionConfirmada = null;
+    $("modal-confirmar").close();
+    if (accion) accion();
+  });
+  $("modal-confirmar").addEventListener("close", () => {
+    accionConfirmada = null;
+  });
+  $("form-precio").addEventListener("submit", (e) => {
+    e.preventDefault();
+    guardarPrecioPedido();
+  });
+  $("btn-precio-cancelar").addEventListener("click", () => $("modal-precio").close());
+  $("modal-precio").addEventListener("close", () => {
+    accionPrecio = null;
+  });
+
+  // Historial
+  $("btn-historial").addEventListener("click", abrirHistorial);
+  $("btn-cerrar-historial").addEventListener("click", () => $("modal-historial").close());
+  $("hist-buscar").addEventListener("input", dibujarHistorial);
+
+  // Tocar el fondo oscuro cierra el diálogo
+  // (no en configuración ni precio, para no perder lo que se está escribiendo)
+  ["modal-horarios", "panel-caja", "modal-elegir", "modal-confirmar", "modal-historial"].forEach(
+    (id) => {
+      const dialogo = $(id);
+      dialogo.addEventListener("click", (e) => {
+        if (e.target !== dialogo) return;
+        const r = dialogo.getBoundingClientRect();
+        const dentro =
+          e.clientX >= r.left &&
+          e.clientX <= r.right &&
+          e.clientY >= r.top &&
+          e.clientY <= r.bottom;
+        if (!dentro) dialogo.close();
+      });
+    },
+  );
+
+  setInterval(refrescarSiHaceFalta, 60000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refrescarSiHaceFalta();
+  });
+
+  dibujarLista();
+}
+
+iniciar();

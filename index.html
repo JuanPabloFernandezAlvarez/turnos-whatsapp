@@ -4,135 +4,206 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <meta name="description" content="Turnos para WhatsApp">
   <title>Turnos</title>
   <link rel="stylesheet" href="iconos/bootstrap-icons.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="iconos/bootstrap-icons.min.css"></noscript>
   <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
   <main>
 
-    <div class="encabezado">
-      <h1>Turnos</h1>
-      <span class="texto-suave" id="contador"></span>
-      <button id="btn-panel" type="button"><i class="bi bi-cash-coin"></i> Caja</button>
-      <button id="btn-historial" type="button"><i class="bi bi-clock-history"></i> Historial</button>
-    </div>
+    <header class="cabecera">
+      <div class="cabecera-titulo">
+        <h1>Turnos</h1>
+        <span class="texto-suave" id="contador"></span>
+      </div>
+      <div class="cabecera-acciones">
+        <button id="btn-panel" type="button"><i class="bi bi-cash-coin" aria-hidden="true"></i> Caja</button>
+        <button id="btn-historial" type="button"><i class="bi bi-clock-history" aria-hidden="true"></i> Historial</button>
+      </div>
+    </header>
 
-    <!-- Carga rápida: nombre + hora + Enter -->
-    <section class="tarjeta">
-      <div class="fila">
-        <label class="campo-nombre-wrap">Nombre:<input id="nombre" class="campo-nombre" placeholder="Nombre"
-            autocomplete="off"></label>
+    <!-- Carga rápida: nombre + horario + Enter -->
+    <form id="form-turno" class="tarjeta" novalidate>
+      <div class="fila fila-turno">
+        <div class="campo campo-nombre">
+          <label for="nombre">Nombre</label>
+          <input id="nombre" placeholder="Nombre del cliente" maxlength="80" autocomplete="off" enterkeyhint="done">
+        </div>
         <input id="hora" type="hidden">
         <input id="fecha" type="hidden">
-        <button id="btn-horarios" class="btn-horarios btn-icono" type="button" aria-label="Elegir hora disponible"
-          title="Elegir hora disponible"><i class="bi bi-clock" aria-hidden="true"></i><span
+        <button id="btn-horarios" class="btn-horarios btn-icono" type="button" aria-label="Elegir horario disponible"
+          title="Elegir horario disponible"><i class="bi bi-clock" aria-hidden="true"></i><span
             id="hora-seleccionada"></span></button>
-        <button id="btn-agregar" class="btn-principal btn-icono" type="button" aria-label="Agregar turno"
+        <button id="btn-agregar" class="btn-principal btn-icono" type="submit" aria-label="Agregar turno"
           title="Agregar turno">
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
         </button>
       </div>
-      <!-- Opcionales: solo si hacen falta -->
-      <div class="opcional">
-        <label class="campo-opcional-wrap">WhatsApp (opcional):</label>
-        <input id="telefono" type="tel" placeholder="WhatsApp (ej: 341 555 1234)">
+      <p id="resumen-turno" class="texto-suave resumen-turno" aria-live="polite"></p>
+
+      <!-- Opcional: solo si hace falta -->
+      <div class="campo">
+        <label for="telefono">WhatsApp (opcional)</label>
+        <input id="telefono" type="tel" inputmode="tel" placeholder="Ej: 341 555 1234" autocomplete="off">
       </div>
-    </section>
+      <button id="btn-cancelar-edicion" type="button" hidden>Cancelar edición</button>
+    </form>
 
-    <section id="lista"></section>
+    <section id="lista" tabindex="-1" aria-label="Turnos próximos"></section>
 
-    <!-- Configuración-->
+    <!-- Mensaje de recordatorio -->
     <details class="tarjeta">
-      <summary><i class="bi bi-gear"></i> Recordatorio </summary>
+      <summary><i class="bi bi-gear" aria-hidden="true"></i> Mensaje de recordatorio</summary>
 
-      <input id="negocio" placeholder="Nombre de tu negocio">
-      <textarea id="plantilla" rows="3"></textarea>
+      <div class="campo">
+        <label for="negocio">Nombre de tu negocio</label>
+        <input id="negocio" placeholder="Ej: Barbería Lucas" maxlength="80">
+      </div>
+      <div class="campo">
+        <label for="plantilla">Texto del mensaje</label>
+        <textarea id="plantilla" rows="3" aria-describedby="ayuda-plantilla"></textarea>
+        <p id="ayuda-plantilla" class="texto-suave">
+          Podés usar {nombre}, {dia}, {hora} y {negocio}. Se reemplazan solos al enviar.
+        </p>
+      </div>
     </details>
 
   </main>
-  <dialog id="modal-horarios">
-    <h2>Horarios libres</h2>
-    <input id="modal-fecha" type="date">
+
+  <!-- Elegir horario -->
+  <dialog id="modal-horarios" aria-labelledby="horarios-titulo">
+    <div class="dialogo-cabecera">
+      <h2 id="horarios-titulo">Horarios libres</h2>
+      <button id="btn-cerrar-modal" type="button">Cerrar</button>
+    </div>
+    <div class="campo separado">
+      <label for="modal-fecha">Día</label>
+      <input id="modal-fecha" type="date">
+    </div>
     <div id="modal-grilla" class="grilla"></div>
-    <button id="btn-cerrar-modal" type="button">Cerrar</button>
   </dialog>
-  <dialog id="panel-caja">
-    <div class="encabezado">
-      <h2>Caja</h2>
+
+  <!-- Caja -->
+  <dialog id="panel-caja" aria-labelledby="caja-titulo">
+    <div class="dialogo-cabecera">
+      <h2 id="caja-titulo">Caja</h2>
       <button id="btn-cerrar-panel" type="button">Cerrar</button>
     </div>
 
     <div class="caja-modo">
-      <select id="panel-modo" aria-label="Modo de visualización">
+      <select id="panel-modo" aria-label="Ver por">
         <option value="dia">Día</option>
         <option value="mes">Mes</option>
       </select>
-      <input id="panel-fecha" type="date" max="">
+      <input id="panel-fecha" type="date" max="" aria-label="Fecha a consultar">
     </div>
 
-    <div id="panel-resumen" class="resumen"></div>
+    <div id="panel-resumen" class="resumen" role="group" aria-label="Resumen"></div>
     <div id="panel-desglose"></div>
     <div id="panel-lista"></div>
 
-    <div class="separado registro-corte">
-      <label for="corte-nombre" class="texto-suave">Registrar corte:</label>
-      <input id="corte-nombre" aria-label="Cliente" placeholder="Cliente (opcional)">
-      <select id="corte-servicio" aria-label="Servicio"></select>
-      <input id="corte-hora" type="time" aria-label="Horario del corte">
-      <button id="btn-corte" class="btn-principal btn-icono" type="button" aria-label="Agregar corte">
-        <i class="bi bi-plus-lg"></i>
-      </button>
-    </div>
+    <form id="form-corte" class="registro-corte" novalidate>
+      <h3>Registrar corte</h3>
+      <div class="campo">
+        <label for="corte-nombre">Cliente (opcional)</label>
+        <input id="corte-nombre" placeholder="Nombre del cliente" maxlength="80" autocomplete="off">
+      </div>
+      <div class="campo">
+        <label for="corte-servicio">Servicio</label>
+        <select id="corte-servicio"></select>
+      </div>
+      <div class="fila fila-corte-hora">
+        <div class="campo campo-hora">
+          <label for="corte-hora">Horario</label>
+          <input id="corte-hora" type="time">
+        </div>
+        <button id="btn-corte" class="btn-principal btn-icono" type="submit" aria-label="Agregar corte"
+          title="Agregar corte">
+          <i class="bi bi-plus-lg" aria-hidden="true"></i>
+        </button>
+      </div>
+    </form>
 
-    <button id="btn-config" type="button" class="separado">Cambiar precio y %</button>
+    <button id="btn-config" type="button" class="separado">Servicios y porcentaje</button>
   </dialog>
-  <dialog id="modal-elegir">
+
+  <!-- Elegir servicio al cobrar -->
+  <dialog id="modal-elegir" aria-labelledby="elegir-titulo">
     <h2 id="elegir-titulo"></h2>
     <div id="elegir-lista" class="lista-servicios"></div>
     <button id="btn-elegir-cancelar" type="button">Cancelar</button>
   </dialog>
 
-  <dialog id="modal-confirmar">
+  <!-- Confirmar un borrado -->
+  <dialog id="modal-confirmar" role="alertdialog" aria-labelledby="confirmar-texto">
     <p id="confirmar-texto"></p>
     <div class="fila">
-      <button id="btn-confirmar-no" type="button">Cancelar</button>
+      <button id="btn-confirmar-no" type="button" autofocus>Cancelar</button>
       <button id="btn-confirmar-si" class="btn-peligro" type="button">Borrar</button>
     </div>
   </dialog>
 
-  <dialog id="modal-config">
-    <h2>Tus valores</h2>
+  <!-- Cambiar un precio -->
+  <dialog id="modal-precio" aria-labelledby="precio-titulo">
+    <form id="form-precio" novalidate>
+      <h2 id="precio-titulo"></h2>
+      <div class="campo separado">
+        <label for="precio-valor">Precio</label>
+        <input id="precio-valor" type="number" inputmode="numeric" min="1">
+      </div>
+      <p id="precio-error" class="error" role="alert"></p>
+      <div class="fila">
+        <button id="btn-precio-cancelar" type="button">Cancelar</button>
+        <button class="btn-principal" type="submit">Guardar</button>
+      </div>
+    </form>
+  </dialog>
 
-    <label for="cfg-porcentaje" class="texto-suave">¿Qué % te llevás de cada servicio?</label>
-    <input id="cfg-porcentaje" type="number" inputmode="numeric" placeholder="Ej: 50">
+  <!-- Servicios y porcentaje -->
+  <dialog id="modal-config" aria-labelledby="config-titulo">
+    <h2 id="config-titulo">Tus valores</h2>
+
+    <div class="campo separado">
+      <label for="cfg-porcentaje">¿Qué % te llevás de cada servicio?</label>
+      <input id="cfg-porcentaje" type="number" inputmode="numeric" min="1" max="100" placeholder="Ej: 50">
+    </div>
 
     <h3>Tus servicios</h3>
     <div id="cfg-servicios"></div>
 
-    <div class="fila separado">
-      <input id="srv-nombre" aria-label="Nombre del servicio" placeholder="Ej: Corte + barba">
-      <input id="srv-precio" type="number" inputmode="numeric" aria-label="Precio del servicio" placeholder="Precio">
-      <button id="btn-srv-agregar" class="btn-principal" type="button" aria-label="Agregar servicio"><i
-          class="bi bi-plus-lg"></i></button>
-    </div>
+    <form id="form-servicio" class="fila separado fila-servicio" novalidate>
+      <input id="srv-nombre" aria-label="Nombre del servicio" placeholder="Ej: Corte + barba" maxlength="60">
+      <input id="srv-precio" type="number" inputmode="numeric" min="1" aria-label="Precio del servicio"
+        placeholder="Precio">
+      <button id="btn-srv-agregar" class="btn-principal btn-icono" type="submit" aria-label="Agregar servicio"
+        title="Agregar servicio"><i class="bi bi-plus-lg" aria-hidden="true"></i></button>
+    </form>
 
-    <p id="cfg-error" class="error"></p>
+    <p id="cfg-error" class="error" role="alert"></p>
     <div class="fila">
-      <button id="btn-cancelar-config" type="button" class="btn-peligro">Cerrar</button>
+      <button id="btn-cancelar-config" type="button">Cerrar</button>
       <button id="btn-guardar-config" class="btn-principal" type="button">Guardar</button>
     </div>
   </dialog>
-  <dialog id="modal-historial">
-  <div class="encabezado">
-    <h2>Historial</h2>
-    <button id="btn-cerrar-historial" type="button">Cerrar</button>
-  </div>
-  <input id="hist-buscar" type="search" aria-label="Buscar cliente" placeholder="Buscar cliente">
-  <div id="hist-lista"></div>
-</dialog>
+
+  <!-- Historial -->
+  <dialog id="modal-historial" aria-labelledby="historial-titulo">
+    <div class="dialogo-cabecera">
+      <h2 id="historial-titulo">Historial</h2>
+      <button id="btn-cerrar-historial" type="button">Cerrar</button>
+    </div>
+    <input id="hist-buscar" class="separado" type="search" aria-label="Buscar cliente" placeholder="Buscar cliente">
+    <div id="hist-lista"></div>
+  </dialog>
+
+  <!-- Aviso visible (arriba de los diálogos) y su versión para lectores de pantalla -->
+  <div id="toast" class="toast" popover="manual" aria-hidden="true"></div>
+  <div id="anuncios" class="solo-lector" role="status" aria-live="polite"></div>
+
   <script src="app.js" defer></script>
 </body>
 
