@@ -110,7 +110,7 @@ textarea { resize: vertical; }
 .campo { margin-bottom: 8px; }
 .campo:last-child { margin-bottom: 0; }
 
-.fila { display: flex; gap: 8px; }
+.fila { display: flex; gap: 8px; margin-top: 12px; }
 .fila > button { flex: 1; }
 .fila > .btn-icono { flex: 0 0 44px; }
 .fila-turno { align-items: flex-end; }
