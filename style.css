@@ -60,6 +60,16 @@ h2.dia {
   margin: 20px 0 8px;
 }
 
+.aviso-persistencia {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--rojo);
+  border-radius: 10px;
+  background: var(--tarjeta);
+  color: var(--rojo);
+  font-weight: 600;
+}
+
 /* Títulos de los diálogos */
 dialog h2 {
   font-size: 18px;
@@ -149,14 +159,7 @@ details[open] > summary { margin-bottom: 8px; }
   gap: 10px;
 }
 
-.cabecera-acciones { display: flex; gap: 8px; }
-
-.dialogo-cabecera {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
+.opcional { margin-top: 8px; }
 
 /* ========== TARJETAS ========== */
 .tarjeta {
