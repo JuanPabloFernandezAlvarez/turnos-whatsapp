@@ -19,6 +19,7 @@
       <div class="cabecera-titulo">
         <h1>Turnos</h1>
         <span class="texto-suave" id="contador"></span>
+        <span class="texto-suave estado-sync" id="estado-sync" role="status" hidden></span>
       </div>
       <div class="cabecera-acciones">
         <button id="btn-panel" type="button"><i class="bi bi-cash-coin" aria-hidden="true"></i> Caja</button>
@@ -70,6 +71,13 @@
           Podés usar {nombre}, {dia}, {hora} y {negocio}. Se reemplazan solos al enviar.
         </p>
       </div>
+    </details>
+
+    <!-- Cuenta (solo con la nube activada) -->
+    <details class="tarjeta" id="cuenta" hidden>
+      <summary><i class="bi bi-person-circle" aria-hidden="true"></i> Cuenta</summary>
+      <p class="texto-suave">Ingresaste como <strong id="cuenta-email"></strong></p>
+      <button id="btn-cerrar-sesion" type="button">Cerrar sesión</button>
     </details>
 
   </main>
@@ -200,10 +208,36 @@
     <div id="hist-lista"></div>
   </dialog>
 
+  <!-- Ingreso (solo con la nube activada) -->
+  <dialog id="modal-sesion" aria-labelledby="sesion-titulo">
+    <form id="form-sesion" novalidate>
+      <h2 id="sesion-titulo">Ingresar</h2>
+      <div class="campo separado">
+        <label for="ses-email">Email</label>
+        <input id="ses-email" type="email" inputmode="email" autocomplete="email" autocapitalize="none">
+      </div>
+      <div class="campo">
+        <label for="ses-clave">Contraseña</label>
+        <input id="ses-clave" type="password" autocomplete="current-password">
+      </div>
+      <div class="campo" id="ses-negocio-wrap" hidden>
+        <label for="ses-negocio">Nombre de tu negocio</label>
+        <input id="ses-negocio" maxlength="80" autocomplete="organization" placeholder="Ej: Barbería Lucas">
+      </div>
+      <p id="ses-info" class="texto-suave" role="status"></p>
+      <p id="ses-error" class="error" role="alert"></p>
+      <button id="btn-ses-enviar" class="btn-principal" type="submit">Ingresar</button>
+      <button id="btn-ses-modo" class="enlace" type="button">Crear cuenta nueva</button>
+    </form>
+  </dialog>
+
   <!-- Aviso visible (arriba de los diálogos) y su versión para lectores de pantalla -->
   <div id="toast" class="toast" popover="manual" aria-hidden="true"></div>
   <div id="anuncios" class="solo-lector" role="status" aria-live="polite"></div>
 
+  <script src="config.js" defer></script>
+  <script src="vendor/supabase.js" defer></script>
+  <script src="almacen.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 

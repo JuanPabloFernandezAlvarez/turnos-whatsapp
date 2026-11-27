@@ -110,7 +110,7 @@ textarea { resize: vertical; }
 .campo { margin-bottom: 8px; }
 .campo:last-child { margin-bottom: 0; }
 
-.fila { display: flex; gap: 8px; margin-top: 12px; }
+.fila { display: flex; gap: 8px; }
 .fila > button { flex: 1; }
 .fila > .btn-icono { flex: 0 0 44px; }
 .fila-turno { align-items: flex-end; }
@@ -453,6 +453,22 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
   margin: 0 0 16px;
   font-size: 17px;
 }
+
+/* ========== CUENTA E INGRESO ========== */
+.estado-sync { font-size: 13px; }
+.estado-sync[data-estado="sin-conexion"] { color: var(--rojo); font-weight: 600; }
+.estado-sync[data-estado="guardado"]::before { content: "✓ "; }
+
+#form-sesion button { width: 100%; margin-top: 8px; }
+
+.enlace {
+  background: none;
+  color: var(--verde-texto);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+#ses-info:empty { display: none; }
 
 /* ========== MOVIMIENTO REDUCIDO ========== */
 @media (prefers-reduced-motion: reduce) {

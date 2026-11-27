@@ -4,7 +4,6 @@
 // CONSTANTES
 // =====================================================
 
-const CLAVE_GUARDADO = "turnos_v1";
 const ESTADOS_TURNO = ["pendiente", "confirmado", "cancelado", "ausente"];
 // Un turno cancelado o ausente libera su horario
 const ESTADOS_SIN_LUGAR = ["cancelado", "ausente"];
@@ -42,12 +41,9 @@ const sinAcentos = (texto) =>
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "");
 
-// IDs únicos aunque se creen varios en el mismo milisegundo
-let ultimoId = 0;
-function nuevoId() {
-  ultimoId = Math.max(Date.now(), ultimoId + 1);
-  return ultimoId;
-}
+// IDs únicos (UUID, texto). Se generan acá y no en la base, para que
+// más adelante se puedan crear registros sin conexión.
+const nuevoId = nuevoUuid; // definido en almacen.js
 
 // =====================================================
 // FECHAS Y HORAS
@@ -159,11 +155,11 @@ function normalizar(crudo) {
   const servicios = lista(crudo.servicios)
     .map((s) => ({
       ...s,
-      id: Number(s.id),
+      id: String(s.id ?? ""),
       nombre: String(s.nombre ?? "").trim(),
       precio: Number(s.precio),
     }))
-    .filter((s) => Number.isFinite(s.id) && s.nombre && s.precio > 0);
+    .filter((s) => s.id && s.nombre && s.precio > 0);
 
   // Migración: versiones viejas guardaban un único "precioCorte"
   if (Number(crudo.precioCorte) > 0 && servicios.length === 0) {
@@ -179,25 +175,29 @@ function normalizar(crudo) {
   const turnos = lista(crudo.turnos)
     .map((t) => ({
       ...t,
-      id: Number(t.id),
+      id: String(t.id ?? ""),
       nombre: String(t.nombre ?? ""),
       telefono: String(t.telefono ?? ""),
       estado: ESTADOS_TURNO.includes(t.estado) ? t.estado : "pendiente",
       cobrado: Boolean(t.cobrado),
     }))
-    .filter((t) => Number.isFinite(t.id) && fechaValida(t.fecha) && horaValida(t.hora));
+    .filter((t) => t.id && fechaValida(t.fecha) && horaValida(t.hora));
 
   const cortes = lista(crudo.cortes)
-    .map((c) => ({
-      ...c,
-      id: Number(c.id),
-      nombre: String(c.nombre ?? ""),
-      servicio: String(c.servicio || "Corte"),
-      hora: horaValida(c.hora) ? c.hora : "00:00",
-      precio: Number(c.precio),
-      porcentaje: Number(c.porcentaje) > 0 ? Number(c.porcentaje) : porcentaje || 0,
-    }))
-    .filter((c) => Number.isFinite(c.id) && fechaValida(c.fecha) && c.precio > 0);
+    .map((c) => {
+      const corte = {
+        ...c,
+        id: String(c.id ?? ""),
+        nombre: String(c.nombre ?? ""),
+        servicio: String(c.servicio || "Corte"),
+        hora: horaValida(c.hora) ? c.hora : "00:00",
+        precio: Number(c.precio),
+        porcentaje: Number(c.porcentaje) > 0 ? Number(c.porcentaje) : porcentaje || 0,
+      };
+      if (c.turnoId != null) corte.turnoId = String(c.turnoId);
+      return corte;
+    })
+    .filter((c) => c.id && fechaValida(c.fecha) && c.precio > 0);
 
   const horario =
     crudo.horario && typeof crudo.horario === "object" ? crudo.horario : {};
@@ -218,41 +218,21 @@ function normalizar(crudo) {
   return resultado;
 }
 
-function cargar() {
-  let guardado = null;
-  try {
-    guardado = localStorage.getItem(CLAVE_GUARDADO);
-  } catch (error) {
-    console.error("No se pudo leer lo guardado", error);
-  }
-  if (!guardado) {
-    datos = datosIniciales();
-    return;
-  }
+// Cuántas veces se guardó algo: sirve para no pisar cambios recientes
+// con datos que llegaron tarde desde la nube.
+let versionLocal = 0;
+let ultimaCargaNube = 0;
 
-  try {
-    datos = normalizar(JSON.parse(guardado));
-  } catch (error) {
-    console.error("Los datos guardados están dañados", error);
-    // Se deja una copia para poder recuperarlos antes de que se pisen
-    try {
-      localStorage.setItem(CLAVE_GUARDADO + "_respaldo", guardado);
-    } catch {
-      /* sin espacio: no hay nada más que hacer */
-    }
-    datos = datosIniciales();
-  }
+// A dónde van los datos lo decide almacen.js; acá solo se avisa que algo cambió.
+function guardar() {
+  versionLocal++;
+  Almacen.guardar(datos);
 }
 
-function guardar() {
-  try {
-    localStorage.setItem(CLAVE_GUARDADO, JSON.stringify(datos));
-    return true;
-  } catch (error) {
-    console.error("No se pudo guardar", error);
-    mostrarToast("No se pudo guardar. Revisá el espacio del navegador.");
-    return false;
-  }
+async function cargarDatos() {
+  const crudo = await Almacen.cargar();
+  datos = normalizar(crudo);
+  ultimaCargaNube = Date.now();
 }
 
 // =====================================================
@@ -317,7 +297,7 @@ function alClickear(idContenedor, acciones) {
     const boton = evento.target.closest("[data-accion]");
     if (!boton || !contenedor.contains(boton) || boton.disabled) return;
     const accion = acciones[boton.dataset.accion];
-    if (accion) accion(Number(boton.dataset.id), boton.dataset);
+    if (accion) accion(boton.dataset.id, boton.dataset);
   });
 }
 
@@ -334,12 +314,20 @@ function confirmar(texto, accion, textoBoton = "Borrar") {
   $("modal-confirmar").showModal();
 }
 
-function confirmarBorrado(registros, id, mensaje, redibujar, mensajeExito) {
+function confirmarBorrado(
+  registros,
+  id,
+  mensaje,
+  redibujar,
+  mensajeExito,
+  alBorrar = () => {},
+) {
   const registro = registros.find((r) => r.id === id);
   if (!registro) return;
 
   confirmar(mensaje(registro), () => {
     registros.splice(registros.indexOf(registro), 1);
+    alBorrar(registro);
     guardar();
     redibujar();
     mostrarToast(mensajeExito);
@@ -358,7 +346,7 @@ function pedirPrecio(titulo, precioActual, alGuardar) {
 }
 
 function guardarPrecioPedido() {
-  const precio = Number($("precio-valor").value);
+  const precio = Math.round(Number($("precio-valor").value));
   if (!(precio > 0)) {
     $("precio-error").textContent = "Poné un precio mayor a cero";
     $("precio-valor").focus();
@@ -892,7 +880,7 @@ function dibujarServicios() {
 
 function agregarServicio() {
   const nombre = $("srv-nombre").value.trim();
-  const precio = Number($("srv-precio").value);
+  const precio = Math.round(Number($("srv-precio").value));
 
   if (!nombre || !(precio > 0)) {
     $("cfg-error").textContent = "Poné el nombre y el precio del servicio";
@@ -1037,7 +1025,7 @@ function cobrarConServicio(turnoId, servicioId) {
 
 function agregarCorteManual() {
   const servicio = datos.servicios.find(
-    (s) => s.id === Number($("corte-servicio").value),
+    (s) => s.id === $("corte-servicio").value,
   );
   if (!servicio) {
     mostrarToast("Elegí un servicio");
@@ -1102,8 +1090,16 @@ function borrarCorte(id) {
     datos.cortes,
     id,
     (corte) => `¿Borrar el corte de ${corte.nombre} (${pesos(corte.precio)})?`,
-    dibujarPanel,
+    () => {
+      dibujarPanel();
+      dibujarLista();
+    },
     "Corte borrado",
+    // Si el cobro era de un turno, ese turno vuelve a poder cobrarse
+    (corte) => {
+      const turno = corte.turnoId != null ? buscarTurno(corte.turnoId) : null;
+      if (turno) turno.cobrado = false;
+    },
   );
 }
 
@@ -1279,7 +1275,7 @@ function dibujarHistorial() {
 }
 
 // =====================================================
-// SINCRONIZACIÓN ENTRE PESTAÑAS
+// SESIÓN Y SINCRONIZACIÓN
 // =====================================================
 
 function redibujarTodo() {
@@ -1290,34 +1286,166 @@ function redibujarTodo() {
   if ($("panel-caja").open) dibujarPanel();
 }
 
-window.addEventListener("storage", (evento) => {
-  if (evento.key !== CLAVE_GUARDADO || !evento.newValue) return;
+// Texto de la sección de recordatorio (no se pisa si se está escribiendo ahí)
+function ponerCamposDeConfig() {
+  if (document.activeElement !== $("negocio")) $("negocio").value = datos.negocio;
+  if (document.activeElement !== $("plantilla")) $("plantilla").value = datos.plantilla;
+}
+
+const TEXTO_ESTADO = {
+  guardando: "Guardando…",
+  guardado: "Guardado",
+  "sin-conexion": "Sin conexión · se guardará solo",
+};
+
+function mostrarEstadoGuardado(estado) {
+  const aviso = $("estado-sync");
+  aviso.hidden = false;
+  aviso.dataset.estado = estado;
+  aviso.textContent = TEXTO_ESTADO[estado] || "";
+}
+
+function mostrarCuenta() {
+  $("cuenta").hidden = Almacen.modo !== "nube";
+  $("cuenta-email").textContent = Almacen.usuario() || "";
+}
+
+let datosCargados = false;
+
+// Carga los datos y dibuja la pantalla. Devuelve false si no hubo conexión.
+async function arrancar() {
+  // Si la sesión venció con cambios sin guardar, se conservan y se reintentan
+  if (datosCargados && Almacen.hayPendientes()) {
+    Almacen.reintentar();
+    return true;
+  }
 
   try {
-    const actualizados = JSON.parse(evento.newValue);
-    if (!actualizados || !Array.isArray(actualizados.turnos)) {
-      throw new Error("Los datos guardados no contienen una lista de turnos");
-    }
-    datos = normalizar(actualizados);
+    await cargarDatos();
+  } catch (error) {
+    console.error("No se pudieron cargar los datos", error);
+    $("lista").innerHTML =
+      '<div class="vacio">No se pudo conectar para cargar tus turnos.<br>' +
+      '<button type="button" data-accion="reintentar">Reintentar</button></div>';
+    return false;
+  }
+
+  datosCargados = true;
+  $("fecha").value = hoyISO();
+  ponerCamposDeConfig();
+  ponerModoFormulario(null);
+  actualizarSeleccion();
+  mostrarCuenta();
+  dibujarLista();
+  return true;
+}
+
+async function recargarDesdeAlmacen() {
+  try {
+    await cargarDatos();
+    ponerCamposDeConfig();
     redibujarTodo();
   } catch (error) {
-    console.error("No se pudo sincronizar los turnos de otra pestaña", error);
+    console.error("No se pudo actualizar", error);
   }
-});
+}
+
+// Trae lo que se cargó desde otro dispositivo (al volver a la app y cada tanto)
+async function traerCambiosDeLaNube() {
+  if (Almacen.modo !== "nube" || !datosCargados) return;
+  if (Almacen.hayPendientes() || document.querySelector("dialog[open]")) return;
+  if (Date.now() - ultimaCargaNube < 30000) return;
+
+  const version = versionLocal;
+  try {
+    const crudo = await Almacen.cargar();
+    // Si mientras tanto se cambió algo acá, lo recibido ya quedó viejo
+    if (version !== versionLocal || Almacen.hayPendientes()) return;
+    datos = normalizar(crudo);
+    ultimaCargaNube = Date.now();
+    ponerCamposDeConfig();
+    redibujarTodo();
+  } catch (error) {
+    console.error("No se pudo actualizar desde la nube", error);
+  }
+}
+
+// ---------- Pantalla de ingreso ----------
+
+let modoRegistro = false;
+
+function ponerModoSesion(registro) {
+  modoRegistro = registro;
+  $("sesion-titulo").textContent = registro ? "Crear cuenta" : "Ingresar";
+  $("btn-ses-enviar").textContent = registro ? "Crear cuenta" : "Ingresar";
+  $("btn-ses-modo").textContent = registro ? "Ya tengo cuenta" : "Crear cuenta nueva";
+  $("ses-negocio-wrap").hidden = !registro;
+  $("ses-clave").autocomplete = registro ? "new-password" : "current-password";
+  $("ses-error").textContent = "";
+  $("ses-info").textContent = "";
+}
+
+function abrirSesion() {
+  ponerModoSesion(false);
+  $("ses-clave").value = "";
+  if (!$("modal-sesion").open) $("modal-sesion").showModal();
+}
+
+async function enviarSesion() {
+  const email = $("ses-email").value.trim();
+  const clave = $("ses-clave").value;
+  $("ses-error").textContent = "";
+  $("ses-info").textContent = "";
+
+  if (!email || !clave) {
+    $("ses-error").textContent = "Completá el email y la contraseña";
+    return;
+  }
+  if (modoRegistro && clave.length < 6) {
+    $("ses-error").textContent = "La contraseña debe tener al menos 6 caracteres";
+    return;
+  }
+
+  $("btn-ses-enviar").disabled = true;
+  try {
+    if (modoRegistro) {
+      const resultado = await Almacen.registrar(email, clave, $("ses-negocio").value.trim());
+      if (resultado.necesitaConfirmar) {
+        ponerModoSesion(false);
+        $("ses-info").textContent =
+          "Te enviamos un mensaje para confirmar tu email. Confirmalo y después ingresá.";
+        return;
+      }
+    } else {
+      await Almacen.ingresar(email, clave);
+    }
+    $("modal-sesion").close();
+    $("ses-clave").value = "";
+    await arrancar();
+  } catch (error) {
+    $("ses-error").textContent = error.message;
+  } finally {
+    $("btn-ses-enviar").disabled = false;
+  }
+}
+
+function cerrarSesion() {
+  if (Almacen.hayPendientes()) {
+    confirmar(
+      "Hay cambios que todavía no se guardaron. Si salís ahora, se pierden. ¿Salir igual?",
+      () => Almacen.salir(),
+      "Salir",
+    );
+    return;
+  }
+  Almacen.salir();
+}
 
 // =====================================================
 // INICIO
 // =====================================================
 
-function iniciar() {
-  cargar();
-
-  $("fecha").value = hoyISO();
-  $("negocio").value = datos.negocio;
-  $("plantilla").value = datos.plantilla;
-  ponerModoFormulario(null);
-  actualizarSeleccion();
-
+function enlazarEventos() {
   // Formulario de turnos (Enter en cualquier campo también envía)
   $("form-turno").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -1345,6 +1473,7 @@ function iniciar() {
     ausente: (id) => cambiarEstado(id, "ausente"),
     editar: editarTurno,
     borrar: borrarTurno,
+    reintentar: () => arrancar(),
   });
   alClickear("modal-grilla", { horario: (_, dataset) => elegirHorario(dataset.hora) });
   alClickear("elegir-lista", {
@@ -1435,12 +1564,62 @@ function iniciar() {
     },
   );
 
+  // Ingreso y cuenta
+  $("form-sesion").addEventListener("submit", (e) => {
+    e.preventDefault();
+    enviarSesion();
+  });
+  $("btn-ses-modo").addEventListener("click", () => ponerModoSesion(!modoRegistro));
+  // El ingreso no se puede cerrar con Esc: sin sesión no hay datos que mostrar
+  $("modal-sesion").addEventListener("cancel", (e) => e.preventDefault());
+  $("btn-cerrar-sesion").addEventListener("click", cerrarSesion);
+
+  // Avisos de la capa de datos
+  Almacen.alError = ({ mensaje, recargar, sesion }) => {
+    mostrarToast(mensaje);
+    if (sesion) abrirSesion();
+    else if (recargar) recargarDesdeAlmacen();
+  };
+  Almacen.alEstado = mostrarEstadoGuardado;
+  Almacen.alCambioExterno = (crudo) => {
+    datos = normalizar(crudo);
+    ponerCamposDeConfig();
+    redibujarTodo();
+  };
+  Almacen.alSalir = () => location.reload();
+
   setInterval(refrescarSiHaceFalta, 60000);
+  setInterval(traerCambiosDeLaNube, 5 * 60000);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) refrescarSiHaceFalta();
+    if (document.hidden) return;
+    refrescarSiHaceFalta();
+    traerCambiosDeLaNube();
+  });
+  window.addEventListener("online", () => {
+    if (!datosCargados && !$("modal-sesion").open) arrancar();
   });
 
-  dibujarLista();
+  // Avisa si se intenta cerrar con cambios todavía sin guardar
+  window.addEventListener("beforeunload", (e) => {
+    if (!Almacen.hayPendientes()) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
+}
+
+async function iniciar() {
+  enlazarEventos();
+
+  let sesion;
+  try {
+    sesion = await Almacen.iniciar();
+  } catch (error) {
+    console.error("No se pudo iniciar", error);
+    sesion = { necesitaLogin: true };
+  }
+
+  if (sesion.necesitaLogin) abrirSesion();
+  else await arrancar();
 }
 
 iniciar();
